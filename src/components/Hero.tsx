@@ -8,7 +8,7 @@ import { gsap } from "@/lib/gsap";
 import { site } from "@/lib/data/site";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { useIntroReady } from "@/components/motion/IntroSequence";
-import { ease, pageTransitionSettleTime, staggerReveal } from "@/lib/motion";
+import { ease, heroTextBudget, pageTransitionSettleTime, staggerReveal } from "@/lib/motion";
 
 export default function Hero() {
   const sectionRef = useRef<HTMLElement>(null);
@@ -99,6 +99,27 @@ export default function Hero() {
       // harmless, simple default - not a visible problem - next to the
       // complexity of threading that flag through.
       const pageRevealDelay = pageTransitionSettleTime(true);
+      const topBarDelay = pageRevealDelay;
+      const headlineDelay = pageRevealDelay + 0.1;
+
+      // On fluid.glass, the hero text finishes clearly *before* the nav
+      // does, not after - heroTextBudget derives the *ceiling* each element
+      // here gets, from the nav's own actual settle time
+      // (navEntranceSettleTime, see lib/motion.ts), so that stays true even
+      // if either side's timing changes later. These are ceilings, not
+      // targets, though: each element below uses its own natural duration
+      // (the same 0.9s as the top bar always has, the same staggerReveal
+      // values the loader's wordmark uses) and only compresses below that
+      // if the budget genuinely can't fit it - rather than always scaling
+      // to exactly fill whatever room is available, which is what made the
+      // headline reveal feel noticeably rushed right after this budget
+      // mechanism was first introduced (back when the nav's own settle time
+      // was shorter, leaving a much tighter ceiling to compress into).
+      const NATURAL_DURATION = 0.9;
+      const topBarBudget = heroTextBudget(topBarDelay);
+      const headlineBudget = heroTextBudget(headlineDelay);
+      const topBarDuration = Math.min(NATURAL_DURATION, topBarBudget);
+      const specialtyDuration = Math.min(NATURAL_DURATION, headlineBudget);
 
       // Top bar (title + "Get a Quote") fades in on its own, independent of
       // the headline timeline below - it's hidden behind the intro overlay
@@ -107,15 +128,18 @@ export default function Hero() {
       gsap.fromTo(
         [topBarRef.current, ctaRef.current],
         { opacity: 0 },
-        { opacity: 1, duration: 0.9, ease: ease.outQuart, delay: pageRevealDelay }
+        { opacity: 1, duration: topBarDuration, ease: ease.outQuart, delay: topBarDelay }
       );
 
       // Each word is its own mask reveal, pushed down (yPercent: 100) inside
       // its own overflow-clip box in the JSX below, then slides up into
-      // view - the same technique, and the same shared staggerReveal
-      // duration/stagger/ease, as the intro loader's wordmark letters (see
-      // IntroSequence.tsx), just at word granularity instead of letter
-      // granularity. That starting pose is set here, immediately and
+      // view - the same technique, duration, and stagger as the intro
+      // loader's wordmark letters (see IntroSequence.tsx and staggerReveal
+      // in lib/motion.ts), just at word granularity instead of letter
+      // granularity - scaled down from those values only if headlineBudget
+      // can't fit them at full size, keeping the same duration:stagger
+      // ratio throughout so a compressed cascade still reads the same way,
+      // just faster. That starting pose is set here, immediately and
       // outside the delayed timeline below - not as a queued .set() step
       // inside it. A queued .set() only executes once the timeline's
       // playhead reaches it, i.e. after the delay elapses, which left the
@@ -124,20 +148,25 @@ export default function Hero() {
       // as the delay ran out - a flash-then-reveal glitch rather than a
       // clean reveal.
       gsap.set(words, { yPercent: 100 });
+      const naturalWordsTotal =
+        staggerReveal.duration + staggerReveal.stagger * (words.length - 1);
+      const wordScale = Math.min(1, headlineBudget / naturalWordsTotal);
+      const wordDuration = staggerReveal.duration * wordScale;
+      const wordStagger = staggerReveal.stagger * wordScale;
 
       // The specialty block starts at the same moment as the headline (not
       // after), fading and sliding up together with it. A short 0.1s stagger
       // after the top bar, same layered feel as before this fix.
-      const tl = gsap.timeline({ delay: pageRevealDelay + 0.1 });
+      const tl = gsap.timeline({ delay: headlineDelay });
       tl.to(words, {
         yPercent: 0,
-        duration: staggerReveal.duration,
+        duration: wordDuration,
         ease: staggerReveal.ease,
-        stagger: staggerReveal.stagger,
+        stagger: wordStagger,
       }).fromTo(
           specialtyRef.current,
           { opacity: 0, y: 24 },
-          { opacity: 1, y: 0, duration: 0.9, ease: ease.outQuart },
+          { opacity: 1, y: 0, duration: specialtyDuration, ease: ease.outQuart },
           0
         );
     },

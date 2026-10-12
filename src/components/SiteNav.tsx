@@ -9,7 +9,7 @@ import { MenuOverlay } from "@/components/MenuOverlay";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { useIntroReady } from "@/components/motion/IntroSequence";
 import { useLenis } from "@/components/SmoothScroll";
-import { ease } from "@/lib/motion";
+import { ease, navEntrance } from "@/lib/motion";
 
 const sectionLabels: Record<string, string> = {
   "/": "Home",
@@ -169,31 +169,27 @@ export function SiteNav() {
         });
       }
 
-      // Durations below are grounded in rAF-driven computed-style polling of
-      // fluid.glass's own live nav entrance, isolating each sub-phase
-      // separately (rise, width-grow, icon, label) rather than inferring
-      // overall timing from a couple of screenshots - an earlier pass at
-      // this (see git history) only tracked the rise and wrongly inferred
-      // the whole sequence from that, landing on ~800-900ms total and
-      // compressing icon/label to start well before they really do.
-      //
-      // What the per-phase polling actually found: the rise (~0.9s) and the
-      // width-grow (~0.9s, starting roughly a third of the way into the
-      // rise, not after it finishes) happen concurrently - but the icon
-      // slide and label reveal don't start until *after* both of those are
-      // essentially done (~1s in), and then take another ~0.85s on their
-      // own. Total real sequence: ~1.8-2s, not ~0.9s - icon/label is a
-      // distinct, later phase, not an early-overlapping one.
-      const RISE_DURATION = 0.9;
-      const GROW_DURATION = 0.9;
-      const ICON_DURATION = 0.85;
-      const LABEL_DURATION = 0.85;
-      const BURGER_DURATION = 0.5;
-      const BURGER_STAGGER = 0.04;
-      const growStart = RISE_DURATION * 0.33;
-      const sharedStart = 1;
+      // Durations below live in src/lib/motion.ts (navEntrance), not as
+      // local consts here - Hero.tsx's own text-entrance timing is derived
+      // from this nav's actual settle time (via
+      // navEntranceSettleTime/heroTextBudget), so the two can't drift out
+      // of sync the way separately-hand-tuned constants eventually do. See
+      // the doc comment on navEntrance itself for why growStartRatio and
+      // growEase both changed from the originally rAF-measured fluid.glass
+      // values: side-by-side comparison against the live site showed the
+      // short, collapsed pill needs to visibly rise into place *first*,
+      // with the elongation reading as a distinct, visible second beat
+      // rather than an near-instant snap to full width.
+      const RISE_DURATION = navEntrance.riseDuration;
+      const GROW_DURATION = navEntrance.growDuration;
+      const ICON_DURATION = navEntrance.iconDuration;
+      const LABEL_DURATION = navEntrance.labelDuration;
+      const BURGER_DURATION = navEntrance.burgerDuration;
+      const BURGER_STAGGER = navEntrance.burgerStagger;
+      const growStart = RISE_DURATION * navEntrance.growStartRatio;
+      const sharedStart = navEntrance.sharedStart;
 
-      const tl = gsap.timeline({ delay: 0.5 });
+      const tl = gsap.timeline({ delay: navEntrance.delay });
       tl.to(
         navRef.current,
         { y: 0, duration: RISE_DURATION, ease: ease.inOutQuart },
@@ -202,7 +198,11 @@ export function SiteNav() {
         .fromTo(
           pillBgRef.current,
           { clipPath: collapsedClip },
-          { clipPath: expandedClip, duration: GROW_DURATION, ease: "expo.out" },
+          {
+            clipPath: expandedClip,
+            duration: GROW_DURATION,
+            ease: navEntrance.growEase,
+          },
           growStart,
         )
         // Same duration/ease/position as the clip-path tween above, so the
@@ -218,7 +218,7 @@ export function SiteNav() {
             left: expandedBorderInset,
             right: expandedBorderInset,
             duration: GROW_DURATION,
-            ease: "expo.out",
+            ease: navEntrance.growEase,
           },
           growStart,
         )
