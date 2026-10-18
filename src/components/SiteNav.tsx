@@ -20,6 +20,7 @@ const sectionLabels: Record<string, string> = {
 };
 
 function labelForPath(pathname: string) {
+  if (pathname.startsWith("/projects/")) return "Projects";
   return sectionLabels[pathname] ?? "Sterling Arch";
 }
 
@@ -38,6 +39,11 @@ export function SiteNav() {
   const labelRef = useRef<HTMLSpanElement>(null);
   const burgerLinesRef = useRef<HTMLSpanElement>(null);
   const skipCloseAnimRef = useRef(false);
+  // Set in onNavigate below, read and cleared only by the scroll-lock effect
+  // further down - a dedicated ref rather than reusing skipCloseAnimRef,
+  // which the pill-collapse useGSAP effect above also reads and clears on
+  // the same `open` transition before this plain useEffect gets to it.
+  const navigatingRef = useRef(false);
 
   if (pathname !== previousPathname) {
     setPreviousPathname(pathname);
@@ -62,8 +68,17 @@ export function SiteNav() {
       lenisRef?.current?.stop();
       document.body.style.overflow = "hidden";
     } else {
-      lenisRef?.current?.start();
       document.body.style.overflow = "";
+      if (navigatingRef.current) {
+        // Closing because we navigated, not because the user backed out -
+        // PageTransition owns resuming Lenis itself for this pathname
+        // change (see the doc comment on its own hold loop). Calling
+        // start() here too would reopen the stopped gate on wheel/touch
+        // input while that loop is still trying to hold scroll at 0.
+        navigatingRef.current = false;
+      } else {
+        lenisRef?.current?.start();
+      }
     }
     return () => {
       document.body.style.overflow = "";
@@ -489,9 +504,11 @@ export function SiteNav() {
       <MenuOverlay
         open={open}
         returnFocusRef={buttonRef}
+        skipCloseAnimRef={skipCloseAnimRef}
         onClose={() => setOpen(false)}
         onNavigate={() => {
           skipCloseAnimRef.current = true;
+          navigatingRef.current = true;
           setOpen(false);
         }}
       />

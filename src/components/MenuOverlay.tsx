@@ -15,6 +15,7 @@ export function MenuOverlay({
   onClose,
   onNavigate,
   returnFocusRef,
+  skipCloseAnimRef,
 }: {
   open: boolean;
   onClose: () => void;
@@ -25,6 +26,12 @@ export function MenuOverlay({
   // Focus returns here on close, wherever "here" is (the nav's hamburger
   // button) - keeps keyboard focus from silently landing on <body>.
   returnFocusRef: RefObject<HTMLButtonElement | null>;
+  // Same ref SiteNav's own pill-collapse effect reads (and is the one that
+  // resets it back to false - this effect only ever reads it, never resets
+  // it itself, so the two effects can't race on who clears it first). See
+  // the doc comment below on why this backdrop-blur panel specifically
+  // needs the same treatment.
+  skipCloseAnimRef: RefObject<boolean>;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -67,6 +74,28 @@ export function MenuOverlay({
         { opacity: 0, y: 24, scale: 0.98 },
         { opacity: 1, y: 0, scale: 1, duration: 0.5, ease: ease.outQuart },
       );
+    } else if (skipCloseAnimRef.current) {
+      // Closing because a menu link was actually clicked, not because the
+      // user backed out via the X/backdrop - real navigation is a click
+      // away, and PageTransition is about to run its own rise/scale
+      // animation on this same instant. This panel's backdrop-blur-2xl is
+      // expensive to keep re-rendering every frame while its backdrop (the
+      // page behind it) is simultaneously changing under PageTransition's
+      // animation - confirmed via a real Safari recording (frame-hashed to
+      // find exact stall ranges, not guessed from screenshots) showing the
+      // page stuck rendering the same frame for 100-500ms+ stretches right
+      // in this exact window, something Chromium never reproduced for the
+      // same scenario. Two separate blurred, animating elements (this panel
+      // fading out, PageTransition's pane rising in) compositing at once is
+      // exactly the kind of load Safari's backdrop-filter handles far worse
+      // than Chromium's. Snapping straight to the resting (closed) state
+      // removes this panel from that contention entirely, the same fix
+      // already applied to the pill's own shape-revert in SiteNav.tsx.
+      gsap.set([panelRef.current, backdropRef.current], {
+        opacity: 0,
+        pointerEvents: "none",
+      });
+      gsap.set(panelRef.current, { y: 16, scale: 0.98 });
     } else {
       gsap.to(backdropRef.current, {
         opacity: 0,

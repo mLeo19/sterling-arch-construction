@@ -16,9 +16,7 @@ export const duration = {
 } as const;
 
 // PageTransition's incoming-pane rise/scale, shared so other components can
-// time their own entrance relative to when that pane actually settles,
-// instead of guessing at a disconnected delay. See the settle-time doc
-// comment below and the one on the PageTransition call site in Hero.tsx.
+// time their own entrance relative to when that pane actually settles.
 export const pageTransition = {
   initial: { yDuration: 0.9, scaleDuration: 1.3, scaleOffset: 0.4 },
   subsequent: { yDuration: 0.65, scaleDuration: 0.9, scaleOffset: 0.28 },
@@ -31,6 +29,30 @@ export function pageTransitionSettleTime(isInitialLoad: boolean) {
   const cfg = isInitialLoad ? pageTransition.initial : pageTransition.subsequent;
   return Math.max(cfg.yDuration, cfg.scaleOffset + cfg.scaleDuration);
 }
+
+// When the pane's rise (not its scale-grow tail) finishes - the moment it
+// reads as "arrived," even though scale keeps subtly growing a bit after.
+// Content riding inside the pane (Hero's headline, RevealOnScroll items)
+// times its own entrance off this rather than the full settle, so it's
+// already underway while the pane is still finishing its final grow
+// instead of queued entirely behind it.
+export function pageTransitionRiseTime(isInitialLoad: boolean) {
+  return (isInitialLoad ? pageTransition.initial : pageTransition.subsequent).yDuration;
+}
+
+// Whether the app's one-time initial-load PageTransition has already played
+// in this session. A plain mutable object, not React state/context - a
+// freshly-remounted page component (Hero's text reveal, RevealOnScroll)
+// reads it synchronously in its own entrance effect to pick initial- vs
+// subsequent-load timing.
+//
+// Safe to read without any real data flow: React runs a descendant's
+// effects before an ancestor's for the same commit, so on the one
+// navigation where this actually matters (the very first, where
+// PageTransition and a freshly-readied child both react to the same
+// `ready` flip), the child's read happens first and still sees the correct
+// answer - the untouched `false` default *is* "this is the initial load".
+export const pageTransitionState = { hasPlayedInitial: false };
 
 // The clip-mask reveal used for the intro loader's wordmark letters (each
 // letter in its own overflow-clip box, sliding up from yPercent: 100,
@@ -48,22 +70,7 @@ export const staggerReveal = {
 // reveal, burger-line reveal), hoisted here so Hero's text-reveal timing
 // can be derived from the nav's *actual* settle time (see
 // navEntranceSettleTime/heroTextBudget below) instead of two independently
-// hand-tuned numbers that happen to line up today. That's what drifted out
-// of sync the first time: Hero's text was retimed to wait for
-// PageTransition's pane without rechecking it against the nav's own
-// (separately-tuned) finish time, and ended up finishing *after* the nav
-// instead of before it - backwards from fluid.glass, where the hero text
-// finishes clearly before the nav does.
-// growStartRatio raised from 0.33 and growDuration/growEase both slowed -
-// at the old values the pill's short, collapsed state was barely visible
-// before the width-grow took over, and expo.out's extremely front-loaded
-// curve meant most of that grow's visual distance happened in its first
-// ~30%, reading as "pops straight to full width" rather than a perceptible
-// elongation. Direct comparison against the live fluid.glass site called
-// this out specifically: its short pill visibly rises into place *first*,
-// and only *then** elongates, as two distinct beats - power3.out keeps the
-// deceleration but far less extreme than expo.out, so the growth itself
-// reads as a continuous, visible motion rather than an instant snap.
+// hand-tuned numbers that have to be kept in sync by hand.
 export const navEntrance = {
   delay: 0.5,
   riseDuration: 1.0,

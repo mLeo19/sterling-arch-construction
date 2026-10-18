@@ -24,4 +24,27 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  /* PageTransition.tsx swaps a huge chunk of layout in one synchronous paint
+     at the end of every page transition: a 1-viewport-tall spacer (reserving
+     contentRef's space while it's position:fixed) collapses to 0 at the same
+     instant contentRef returns to static flow with its own, much taller,
+     real height - a layout shift squarely above-or-at the current scroll
+     position. The browser's own CSS Scroll Anchoring (on by default in
+     Chromium/Firefox, meant to stop async-loaded content from jerking the
+     page around) reads that as exactly the shift it exists to compensate
+     for, and silently moves scrollY to keep whatever it picked as the
+     "anchor" node in the same viewport-relative spot - landing the new
+     route scrolled down to wherever that anchor happened to be instead of
+     the top, with no app code ever asking for it. Confirmed via a real
+     screen recording (not headless - this heuristic doesn't reliably
+     trigger the same way under Playwright's own paint/compositor timing,
+     which is why automated repros of this exact jump kept coming back
+     clean): the jump lands immediately after the GSAP entrance timeline's
+     release() runs, syncing exactly with that spacer-collapse/content-
+     return swap. PageTransition already pins scrollY to 0 for the entire
+     transition and re-asserts it the instant anything moves it off that -
+     scroll anchoring is a second, independent mechanism fighting that same
+     goal from inside the browser itself, so it needs to be turned off
+     outright rather than raced. */
+  overflow-anchor: none;
 }

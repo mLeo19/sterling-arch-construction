@@ -45,6 +45,16 @@ export default function SmoothScroll({
 
     const lenis = new Lenis({
       autoRaf: false, // we drive Lenis ourselves below so it shares gsap's ticker
+      // Zeroes Lenis's own velocity/target the instant a same-origin,
+      // different-pathname link is clicked - without this, clicking a nav
+      // link mid-flick (trackpad momentum still easing out) leaves Lenis
+      // gliding toward its pre-navigation target, which PageTransition's own
+      // resetScroll() has to keep fighting via its scroll guard. Doesn't by
+      // itself stop *new* wheel events the OS keeps synthesizing after the
+      // click (real trackpad momentum), which is what PageTransition's own
+      // guard still exists to catch - this only kills the momentum Lenis
+      // itself was already carrying forward from before the click.
+      stopInertiaOnNavigate: true,
     });
     lenisRef.current = lenis;
 

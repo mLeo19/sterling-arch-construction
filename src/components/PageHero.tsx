@@ -1,15 +1,34 @@
-// Simple placeholder hero for pages that don't have real content yet - just
-// enough height to scroll so the page transition and parallax can be seen
-// working. No animation of its own; replace with real section content later.
-export function PageHero({ title, tagline }: { title: string; tagline: string }) {
+import { Eyebrow } from "@/components/ui/Eyebrow";
+import { SectionHeading } from "@/components/ui/SectionHeading";
+
+/**
+ * Deliberately not wrapped in a scroll-gated reveal. Confirmed on
+ * fluid.glass by polling a heading's opacity through a live page
+ * transition: it never changes, stays at 1 the entire time - the incoming
+ * page's content is always fully opaque, the page-transition pane
+ * (scale/translate on its container) is the only motion. A scroll-gated
+ * fade here would fight that pane and read as "content pops in late."
+ */
+export function PageHero({
+  eyebrow,
+  heading,
+  intro,
+}: {
+  eyebrow: string;
+  heading: string;
+  intro?: string;
+}) {
   return (
-    <section className="flex min-h-[150svh] flex-col items-center justify-center px-6 text-center">
-      <h1 className="text-4xl font-bold tracking-tight text-black sm:text-6xl">
-        {title}
-      </h1>
-      <p className="mt-4 max-w-xl text-base text-black/60 sm:text-lg">
-        {tagline}
-      </p>
+    <section className="bg-white px-6 pt-40 pb-16 sm:px-10 sm:pt-48 sm:pb-20">
+      <div className="mx-auto max-w-4xl">
+        <Eyebrow className="mb-6">{eyebrow}</Eyebrow>
+        <SectionHeading>{heading}</SectionHeading>
+        {intro ? (
+          <p className="mt-6 max-w-xl text-base leading-relaxed text-black/70">
+            {intro}
+          </p>
+        ) : null}
+      </div>
     </section>
   );
 }

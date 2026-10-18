@@ -8,7 +8,13 @@ import { gsap } from "@/lib/gsap";
 import { site } from "@/lib/data/site";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { useIntroReady } from "@/components/motion/IntroSequence";
-import { ease, heroTextBudget, pageTransitionSettleTime, staggerReveal } from "@/lib/motion";
+import {
+  ease,
+  heroTextBudget,
+  pageTransitionRiseTime,
+  pageTransitionState,
+  staggerReveal,
+} from "@/lib/motion";
 
 export default function Hero() {
   const sectionRef = useRef<HTMLElement>(null);
@@ -38,15 +44,19 @@ export default function Hero() {
         scrub: true,
       };
 
-      // The image wrapper is 130% of the hero's height and centered on it
-      // (top: -15%), so it overhangs by 15% above and below. Keeping the
-      // swing within -10/+10 yPercent means both edges of the image always
-      // stay past the hero's clipped bounds, which is what prevents gaps
-      // from appearing above or below it while it drifts.
+      // The image wrapper is 150% of the hero's height and centered on it
+      // (top: -25%), so it overhangs by 25% above and below. A yPercent
+      // swing of Y moves the wrapper by Y% of its *own* height (150%), so
+      // the actual pixel travel is Y*1.5 - that has to stay under the 25%
+      // overhang or the image's edge pulls into view. At Y=15 that's 22.5%,
+      // leaving a small safety margin. (The previous ±10 swing used a
+      // smaller 130%/-15% wrapper sized the same way - overhang had to grow
+      // together with the swing here, not just the swing alone, or this
+      // stronger parallax would expose gaps at the top/bottom edges.)
       gsap.fromTo(
         imageWrapperRef.current,
-        { yPercent: -10 },
-        { yPercent: 10, ease: "none", scrollTrigger: parallaxTrigger }
+        { yPercent: -15 },
+        { yPercent: 15, ease: "none", scrollTrigger: parallaxTrigger }
       );
 
       // No manual cleanup needed: useGSAP's scope automatically reverts every
@@ -57,16 +67,9 @@ export default function Hero() {
 
   // Text entrance, gated on the intro loader's liftoff (`ready`) so it plays
   // once the incoming page is actually visible, not hidden behind the intro
-  // overlay. Modeled on the equivalent reveal already built for Northfield's
-  // own Hero - NOT fluid.glass's: directly polling fluid.glass's own <h1>
-  // frame by frame (computed opacity/transform, through its entire page-pane
-  // rise) showed the headline has no independent animation of its own at
-  // all - it's static text that simply becomes visible as PageTransition's
-  // pane rises over it (already built). Northfield's own code comment
-  // claiming "matches fluid.glass" for this specific per-line mask reveal
-  // doesn't hold up against that measurement. Built anyway, as a deliberate
-  // enhancement in the same spirit/technique (translateY out of a clipped
-  // box, not a fade) rather than fluid.glass's own literal behavior.
+  // overlay. A deliberate enhancement beyond fluid.glass's own hero, whose
+  // heading has no independent animation at all - it's static text that
+  // simply becomes visible as its own page-pane rises over it.
   useGSAP(
     () => {
       if (!ready || !headlineRef.current) return;
@@ -77,44 +80,39 @@ export default function Hero() {
 
       if (prefersReducedMotion) {
         gsap.set([topBarRef.current, ctaRef.current], { opacity: 1 });
-        gsap.set(words, { yPercent: 0 });
+        // y, not yPercent - see the main entrance effect's own doc comment
+        // below on why mixing yPercent with this element's SSR-rendered raw
+        // transform (also translateY, also parsed by GSAP into its `y`
+        // bucket) would add to it instead of clearing it.
+        gsap.set(words, { y: 0 });
         gsap.set(specialtyRef.current, { opacity: 1, y: 0 });
         return;
       }
 
       // This whole section is rendered inside PageTransition's contentRef -
       // the exact element that component translates/scales as its incoming
-      // pane (see PageTransition.tsx). That means the headline's own mask
-      // reveal was, until this fix, playing *while the surrounding pane was
-      // still rising and scaling into place* - two nested motions running
-      // at once (the pane's own rise/grow, plus the headline's local slide),
-      // reading as the text animating the instant the page itself starts
-      // revealing rather than once it's actually settled.
+      // pane (see PageTransition.tsx). Times off pageTransitionRiseTime (the
+      // pane's Y-rise only), not its full settle (rise AND scale-grow) - see
+      // that function's own doc comment in lib/motion.ts for why.
       //
-      // pageTransitionSettleTime always uses the *initial*-load figures
-      // (~1.7s - the slower of the two cases) rather than branching on
-      // which case this particular mount is: Hero has no way to know that
-      // without new plumbing from PageTransition, and starting ~0.5s later
-      // than strictly necessary on a subsequent navigation (~1.18s) is a
-      // harmless, simple default - not a visible problem - next to the
-      // complexity of threading that flag through.
-      const pageRevealDelay = pageTransitionSettleTime(true);
+      // Branches on whether THIS mount is the initial load or a later
+      // client-side navigation, via pageTransitionState (lib/motion.ts) -
+      // the pane's own rise is faster on a subsequent navigation (~0.65s)
+      // than the initial load (~0.9s, slower there because it's also racing
+      // the intro loader's liftoff).
+      const isInitialLoad = !pageTransitionState.hasPlayedInitial;
+      const pageRevealDelay = pageTransitionRiseTime(isInitialLoad);
       const topBarDelay = pageRevealDelay;
       const headlineDelay = pageRevealDelay + 0.1;
 
-      // On fluid.glass, the hero text finishes clearly *before* the nav
-      // does, not after - heroTextBudget derives the *ceiling* each element
-      // here gets, from the nav's own actual settle time
-      // (navEntranceSettleTime, see lib/motion.ts), so that stays true even
-      // if either side's timing changes later. These are ceilings, not
-      // targets, though: each element below uses its own natural duration
+      // heroTextBudget derives a *ceiling* for each element here from the
+      // nav's own actual settle time (navEntranceSettleTime, see
+      // lib/motion.ts), so the hero text keeps finishing before the nav
+      // does even if either side's timing changes later. These are
+      // ceilings, not targets: each element uses its own natural duration
       // (the same 0.9s as the top bar always has, the same staggerReveal
       // values the loader's wordmark uses) and only compresses below that
-      // if the budget genuinely can't fit it - rather than always scaling
-      // to exactly fill whatever room is available, which is what made the
-      // headline reveal feel noticeably rushed right after this budget
-      // mechanism was first introduced (back when the nav's own settle time
-      // was shorter, leaving a much tighter ceiling to compress into).
+      // if the budget genuinely can't fit it.
       const NATURAL_DURATION = 0.9;
       const topBarBudget = heroTextBudget(topBarDelay);
       const headlineBudget = heroTextBudget(headlineDelay);
@@ -131,23 +129,28 @@ export default function Hero() {
         { opacity: 1, duration: topBarDuration, ease: ease.outQuart, delay: topBarDelay }
       );
 
-      // Each word is its own mask reveal, pushed down (yPercent: 100) inside
-      // its own overflow-clip box in the JSX below, then slides up into
-      // view - the same technique, duration, and stagger as the intro
-      // loader's wordmark letters (see IntroSequence.tsx and staggerReveal
-      // in lib/motion.ts), just at word granularity instead of letter
-      // granularity - scaled down from those values only if headlineBudget
-      // can't fit them at full size, keeping the same duration:stagger
-      // ratio throughout so a compressed cascade still reads the same way,
-      // just faster. That starting pose is set here, immediately and
-      // outside the delayed timeline below - not as a queued .set() step
-      // inside it. A queued .set() only executes once the timeline's
-      // playhead reaches it, i.e. after the delay elapses, which left the
-      // headline sitting fully visible in its resting position for that
-      // whole window, then suddenly snapping down and re-animating up right
-      // as the delay ran out - a flash-then-reveal glitch rather than a
-      // clean reveal.
-      gsap.set(words, { yPercent: 100 });
+      // Each word is its own mask reveal, pushed down inside its own
+      // overflow-clip box in the JSX below (translateY(100%), rendered
+      // there directly so it's already the SSR-painted pose - see that
+      // JSX's own doc comment), then slides up into view - the same
+      // technique, duration, and stagger as the intro loader's wordmark
+      // letters (see IntroSequence.tsx and staggerReveal in lib/motion.ts),
+      // just at word granularity instead of letter granularity - scaled
+      // down from those values only if headlineBudget can't fit them at
+      // full size, keeping the same duration:stagger ratio throughout so a
+      // compressed cascade still reads the same way, just faster.
+      //
+      // No gsap.set(words, {yPercent: 100}) here, and the tween below
+      // animates `y`, not `yPercent` - both deliberately. GSAP treats
+      // x/xPercent and y/yPercent as independently tracked and *additive*
+      // (intentional, documented - e.g. xPercent:-50 plus an extra x for a
+      // pixel nudge). The JSX's raw CSS transform is the only thing ever
+      // setting this element's pose before this tween runs, so GSAP caches
+      // it as a `y` (pixel) value the first time it touches the element - a
+      // `yPercent` set on top would add to that instead of overwriting it,
+      // landing at double the intended offset. Animating `y` instead
+      // targets the same bucket GSAP already cached the SSR pose into, so
+      // it cleanly overwrites down to 0.
       const naturalWordsTotal =
         staggerReveal.duration + staggerReveal.stagger * (words.length - 1);
       const wordScale = Math.min(1, headlineBudget / naturalWordsTotal);
@@ -155,11 +158,11 @@ export default function Hero() {
       const wordStagger = staggerReveal.stagger * wordScale;
 
       // The specialty block starts at the same moment as the headline (not
-      // after), fading and sliding up together with it. A short 0.1s stagger
-      // after the top bar, same layered feel as before this fix.
+      // after), fading and sliding up together with it. A short 0.1s
+      // stagger after the top bar gives a layered feel.
       const tl = gsap.timeline({ delay: headlineDelay });
       tl.to(words, {
-        yPercent: 0,
+        y: 0,
         duration: wordDuration,
         ease: staggerReveal.ease,
         stagger: wordStagger,
@@ -181,13 +184,14 @@ export default function Hero() {
     <section ref={sectionRef} className="relative overflow-hidden">
       <div
         ref={imageWrapperRef}
-        className="absolute inset-x-0 top-[-15%] h-[130%] w-full"
+        className="absolute inset-x-0 top-[-25%] h-[150%] w-full"
       >
         <Image
-          src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?q=80&w=2400&auto=format&fit=crop"
-          alt="Low-angle view of modern glass skyscrapers against a dramatic sky"
+          src="https://images.unsplash.com/photo-1758846946188-12316e71c680?q=90&w=3840&auto=format&fit=crop"
+          alt="Detail view of a glass and steel building facade with an exposed staircase structure, next to a textured concrete block building"
           fill
           priority
+          quality={90}
           sizes="100vw"
           className="object-cover"
         />
@@ -230,24 +234,29 @@ export default function Hero() {
             className="max-w-3xl text-3xl leading-tight font-medium text-white sm:text-5xl md:text-6xl"
           >
             {/* Per-word mask reveal: each word gets its own overflow-clip
-                box, the word inside it (set to yPercent: 100 by the
-                entrance effect above) slides up from behind it. Word
-                granularity, not per-line like Northfield's two-line
-                headline - this tagline has no fixed, hand-authored line
-                breaks, so it reflows at different widths; staggering by
-                line would mean guessing fixed break points that drift out
-                of sync with how the text actually wraps on any given
-                screen. Not per-letter either, despite that being what the
-                intro loader's own wordmark does (see staggerReveal in
-                lib/motion.ts, shared by both) - letter-by-letter reads fine
-                for a two-word brand name but far too busy/slow across a
-                full sentence. The space between words is a plain text
-                node, outside any clip box, so normal line-wrapping at word
-                boundaries is untouched. */}
+                box and slides up from behind it. Word granularity, not
+                per-line - this tagline has no fixed line breaks, so it
+                reflows at different widths and staggering by line would
+                mean guessing break points that drift out of sync. Not
+                per-letter either (despite the intro loader's wordmark
+                using that, see staggerReveal in lib/motion.ts) - too busy
+                across a full sentence. The space between words is a plain
+                text node outside any clip box, so line-wrapping at word
+                boundaries is untouched.
+
+                translateY(100%) rendered here directly rather than only
+                via the entrance effect's gsap.set - the server-rendered
+                HTML would otherwise paint fully visible before GSAP ever
+                runs, so every word would flash in at rest before snapping
+                to its hidden pose and sliding back up. */}
             {site.tagline.split(" ").map((word, i) => (
               <Fragment key={i}>
                 <span className="inline-block overflow-clip">
-                  <span data-word className="inline-block">
+                  <span
+                    data-word
+                    className="inline-block"
+                    style={{ transform: "translateY(100%)" }}
+                  >
                     {word}
                   </span>
                 </span>{" "}

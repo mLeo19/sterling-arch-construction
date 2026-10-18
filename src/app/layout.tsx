@@ -4,6 +4,7 @@ import SmoothScroll from "@/components/SmoothScroll";
 import { IntroSequence } from "@/components/motion/IntroSequence";
 import { PageTransition } from "@/components/PageTransition";
 import { SiteNav } from "@/components/SiteNav";
+import { Footer } from "@/components/Footer";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
         <SmoothScroll>
           <IntroSequence>
             <PageTransition>{children}</PageTransition>
+            <Footer />
             <SiteNav />
           </IntroSequence>
         </SmoothScroll>
