@@ -48,3 +48,37 @@ body {
      outright rather than raced. */
   overflow-anchor: none;
 }
+
+/* Lenis's own stylesheet (lenis/dist/lenis.css, imported in
+   SmoothScroll.tsx) sets `overflow: clip` on <html> itself the instant
+   lenis.stop() is called (via its "lenis-stopped" class) - a freeze effect
+   Lenis applies on its own initiative, independent of and in addition to
+   whatever scroll-lock an app does itself (e.g. SiteNav's mobile-menu
+   `document.body.style.overflow = "hidden"`, which locks scrolling via the
+   body->viewport overflow propagation quirk, never touching <html>'s own
+   box). The problem isn't the specific value (clip vs hidden) - changing
+   <html>'s own overflow property to *either* one reproduces the bug
+   (confirmed by testing both before settling on this fix): the instant
+   something other than its default `visible` lands on that element's own
+   box, Chromium re-resolves position:sticky for any element already
+   scrolled past its own "stuck" range as if sitting at scroll position 0,
+   snapping it to its *static* flow position for as long as the altered
+   value remains - reading as the whole section jumping/pushing upward the
+   moment the nav opens. PinnedScale's frame in CraftShowcase.tsx is the
+   one this was caught on. Confirmed via Playwright getBoundingClientRect()
+   measurements before/after a real nav click, both with the stock `clip`
+   and with a `hidden` swap - both jumped identically, which is what ruled
+   out "clip specifically isn't a valid scrollport" as the mechanism.
+   Nothing in this app actually needs Lenis's own freeze-on-stop effect -
+   SiteNav's body-level lock above already blocks real scrolling on its
+   own, and lenis.stop() still does its actual job (pausing Lenis's own
+   rAF-driven scrollTop writes) with zero dependency on this CSS class.
+   Overriding back to `visible` fully neutralizes Lenis's side effect
+   rather than trying to pick a "safe" non-default value, since testing
+   showed there isn't one. Specificity (html + 2 classes + :not()) is
+   deliberately higher than Lenis's own
+   `.lenis:not(.lenis-autoToggle).lenis-stopped` rule so this wins
+   regardless of which stylesheet the bundler orders first. */
+html.lenis.lenis-stopped:not(.lenis-autoToggle) {
+  overflow: visible;
+}
