@@ -9,7 +9,12 @@ import { site } from "@/lib/data/site";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { useIntroReady } from "@/components/motion/IntroSequence";
 import { WordReveal } from "@/components/motion/WordReveal";
-import { ease, heroTextBudget, pageTransitionRiseTime, pageTransitionState } from "@/lib/motion";
+import {
+  ease,
+  heroTextBudget,
+  pageTransitionRiseTime,
+  pageTransitionState,
+} from "@/lib/motion";
 
 export default function Hero() {
   const sectionRef = useRef<HTMLElement>(null);
@@ -23,7 +28,7 @@ export default function Hero() {
   useGSAP(
     () => {
       const prefersReducedMotion = window.matchMedia(
-        "(prefers-reduced-motion: reduce)"
+        "(prefers-reduced-motion: reduce)",
       ).matches;
       if (prefersReducedMotion) return;
 
@@ -50,13 +55,13 @@ export default function Hero() {
       gsap.fromTo(
         imageWrapperRef.current,
         { yPercent: -15 },
-        { yPercent: 15, ease: "none", scrollTrigger: parallaxTrigger }
+        { yPercent: 15, ease: "none", scrollTrigger: parallaxTrigger },
       );
 
       // No manual cleanup needed: useGSAP's scope automatically reverts every
       // tween and ScrollTrigger created above when the component unmounts.
     },
-    { scope: sectionRef }
+    { scope: sectionRef },
   );
 
   // Text entrance, gated on the intro loader's liftoff (`ready`) so it plays
@@ -68,7 +73,7 @@ export default function Hero() {
     () => {
       if (!ready) return;
       const prefersReducedMotion = window.matchMedia(
-        "(prefers-reduced-motion: reduce)"
+        "(prefers-reduced-motion: reduce)",
       ).matches;
 
       if (prefersReducedMotion) {
@@ -114,7 +119,12 @@ export default function Hero() {
       gsap.fromTo(
         [topBarRef.current, ctaRef.current],
         { opacity: 0 },
-        { opacity: 1, duration: topBarDuration, ease: ease.outQuart, delay: topBarDelay }
+        {
+          opacity: 1,
+          duration: topBarDuration,
+          ease: ease.outQuart,
+          delay: topBarDelay,
+        },
       );
 
       // Starts at the same moment WordReveal's own headline reveal does
@@ -129,10 +139,10 @@ export default function Hero() {
           duration: specialtyDuration,
           ease: ease.outQuart,
           delay: headlineDelay,
-        }
+        },
       );
     },
-    { scope: sectionRef, dependencies: [ready] }
+    { scope: sectionRef, dependencies: [ready] },
   );
 
   return (
@@ -146,7 +156,7 @@ export default function Hero() {
         className="absolute inset-x-0 top-[-25%] h-[150%] w-full"
       >
         <Image
-          src="https://images.unsplash.com/photo-1758846946188-12316e71c680?q=90&w=3840&auto=format&fit=crop"
+          src="/images/photo-1758846946188-12316e71c680.jpg"
           alt="Detail view of a glass and steel building facade with an exposed staircase structure, next to a textured concrete block building"
           fill
           priority

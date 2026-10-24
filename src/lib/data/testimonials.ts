@@ -12,7 +12,7 @@ export const testimonials: Testimonial[] = [
     name: "Daniel Ferraro",
     role: "Meridian Office Tower, Hartford CT",
     portrait: {
-      src: "https://images.unsplash.com/photo-1560250097-0b93528c311a?q=80&w=400&auto=format&fit=crop",
+      src: "/images/photo-1560250097-0b93528c311a.jpg",
       alt: "Portrait of a professional man in business attire",
     },
   },
@@ -22,7 +22,7 @@ export const testimonials: Testimonial[] = [
     name: "Monica Reyes",
     role: "Harbor District Mixed-Use, New Haven CT",
     portrait: {
-      src: "https://images.unsplash.com/photo-1699899657680-421c2c2d5064?q=80&w=400&auto=format&fit=crop",
+      src: "/images/photo-1699899657680-421c2c2d5064.jpg",
       alt: "Portrait of a woman with long blonde hair",
     },
   },
@@ -32,7 +32,7 @@ export const testimonials: Testimonial[] = [
     name: "Thomas Whitaker",
     role: "Ashford Hall Restoration, Hartford CT",
     portrait: {
-      src: "https://images.unsplash.com/photo-1576558656222-ba66febe3dec?q=80&w=400&auto=format&fit=crop",
+      src: "/images/photo-1576558656222-ba66febe3dec.jpg",
       alt: "Portrait of a man in a grey business jacket",
     },
   },
@@ -42,7 +42,7 @@ export const testimonials: Testimonial[] = [
     name: "Priya Chandran",
     role: "Lakeview Corporate Campus, Stamford CT",
     portrait: {
-      src: "https://images.unsplash.com/photo-1609436132311-e4b0c9370469?q=80&w=400&auto=format&fit=crop",
+      src: "/images/photo-1609436132311-e4b0c9370469.jpg",
       alt: "Portrait of a woman in a gray and black scarf",
     },
   },
@@ -52,7 +52,7 @@ export const testimonials: Testimonial[] = [
     name: "Adaeze Okafor",
     role: "Union Street Lofts, Providence RI",
     portrait: {
-      src: "https://images.unsplash.com/photo-1701096374092-bb70915fdc5c?q=80&w=400&auto=format&fit=crop",
+      src: "/images/photo-1701096374092-bb70915fdc5c.jpg",
       alt: "Professional portrait of a businesswoman",
     },
   },

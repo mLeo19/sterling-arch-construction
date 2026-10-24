@@ -8,7 +8,7 @@
 // hint is tuned. Confirmed Unsplash actually has native detail at this
 // width for this photo (not an artificial upscale) before raising it.
 export const heroImage = {
-  src: "https://images.unsplash.com/photo-1706808849780-7a04fbac83ef?q=80&w=3840&auto=format&fit=crop",
+  src: "/images/photo-1706808849780-7a04fbac83ef.jpg",
   alt: "Modern upscale house exterior with pool and lounge chairs",
 };
 
@@ -46,7 +46,7 @@ export const processSteps = [
     description:
       "Every project starts with understanding how a client actually plans to use and own the building, not just what they want built.",
     image: {
-      src: "https://images.unsplash.com/photo-1780733057909-e40d3f4c8cbe?q=80&w=1400&auto=format&fit=crop",
+      src: "/images/photo-1780733057909-e40d3f4c8cbe.jpg",
       alt: "Portrait of Richard Solano",
     },
   },
@@ -56,7 +56,7 @@ export const processSteps = [
     description:
       "Design and cost estimating run in parallel, so decisions get made with real numbers attached instead of surfacing as a budget problem later.",
     image: {
-      src: "https://images.unsplash.com/photo-1782290547018-8bb89b8edf07?q=80&w=1400&auto=format&fit=crop",
+      src: "/images/photo-1782290547018-8bb89b8edf07.jpg",
       alt: "Architect's drafting table with transparent stool and wooden sawhorses",
     },
   },
@@ -66,7 +66,7 @@ export const processSteps = [
     description:
       "Our own crews lead the phases most likely to slip; trade partners work against a single schedule, not a sequence of separate contracts.",
     image: {
-      src: "https://images.unsplash.com/photo-1744735973756-b2efa8be24c8?q=80&w=1400&auto=format&fit=crop",
+      src: "/images/photo-1744735973756-b2efa8be24c8.jpg",
       alt: "Welder joining structural steel with bright sparks",
     },
   },
@@ -76,7 +76,7 @@ export const processSteps = [
     description:
       "Punch list, commissioning, and owner training are scheduled from the start, not improvised in the final weeks - and the warranty carries one signature, ours.",
     image: {
-      src: "https://images.unsplash.com/photo-1780369088190-914cc3eee938?q=80&w=1400&auto=format&fit=crop",
+      src: "/images/photo-1780369088190-914cc3eee938.jpg",
       alt: "Spacious modern office lobby with reflective floor and columns",
     },
   },

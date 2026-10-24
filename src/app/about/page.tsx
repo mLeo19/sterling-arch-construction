@@ -75,7 +75,7 @@ export default function AboutPage() {
 
       <section className="relative h-[60svh] min-h-[420px] w-full overflow-hidden">
         <Image
-          src="https://images.unsplash.com/photo-1742185193142-896ae1a8c15d?q=80&w=2000&auto=format&fit=crop"
+          src="/images/photo-1742185193142-896ae1a8c15d.jpg"
           alt="Construction site with cranes and buildings being built"
           fill
           sizes="100vw"

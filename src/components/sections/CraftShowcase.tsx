@@ -7,7 +7,7 @@ import { site } from "@/lib/data/site";
 export function CraftShowcase() {
   return (
     <PinnedScale
-      src="https://images.unsplash.com/photo-1744735973756-b2efa8be24c8?q=80&w=2400&auto=format&fit=crop"
+      src="/images/photo-1744735973756-b2efa8be24c8.jpg"
       alt="Welder joining structural steel with bright sparks"
     >
       <div className="relative z-10 flex h-full w-full items-center">
@@ -16,9 +16,12 @@ export function CraftShowcase() {
             <Eyebrow tone="light" className="mb-4">
               The Craft
             </Eyebrow>
-            <SectionHeading tone="light" className="max-w-md text-3xl sm:text-4xl">
-              A standard of precision that starts long before the first
-              beam goes up.
+            <SectionHeading
+              tone="light"
+              className="max-w-md text-3xl sm:text-4xl"
+            >
+              A standard of precision that starts long before the first beam
+              goes up.
             </SectionHeading>
           </div>
           <div className="flex flex-col items-start gap-6 sm:items-end sm:text-right">

@@ -17,13 +17,13 @@ type FooterImage = { src: string; alt: string };
 // Mirrors Hero.tsx's own backdrop photo, so the homepage footer reads as a
 // continuation of the same hero rather than an unrelated image.
 const HOME_IMAGE: FooterImage = {
-  src: "https://images.unsplash.com/photo-1758846946188-12316e71c680?q=85&w=2400&auto=format&fit=crop",
+  src: "/images/photo-1758846946188-12316e71c680.jpg",
   alt: "Detail view of a glass and steel building facade with an exposed staircase structure, next to a textured concrete block building",
 };
 
 // Mirrors the construction-site photo on the About page.
 const ABOUT_IMAGE: FooterImage = {
-  src: "https://images.unsplash.com/photo-1742185193142-896ae1a8c15d?q=80&w=2000&auto=format&fit=crop",
+  src: "/images/photo-1742185193142-896ae1a8c15d.jpg",
   alt: "Construction site with cranes and buildings being built",
 };
 
@@ -117,8 +117,16 @@ export function Footer() {
       gsap.set(outgoingRef.current, { opacity: 0 });
       return;
     }
-    gsap.to(incomingRef.current, { opacity: 1, duration: 1, ease: ease.outCubic });
-    gsap.to(outgoingRef.current, { opacity: 0, duration: 1, ease: ease.outCubic });
+    gsap.to(incomingRef.current, {
+      opacity: 1,
+      duration: 1,
+      ease: ease.outCubic,
+    });
+    gsap.to(outgoingRef.current, {
+      opacity: 0,
+      duration: 1,
+      ease: ease.outCubic,
+    });
   }
 
   useEffect(() => {
@@ -153,7 +161,10 @@ export function Footer() {
       ref={footerRef}
       className="relative flex min-h-[100svh] flex-col overflow-hidden bg-black text-white"
     >
-      <div ref={parallaxRef} className="absolute inset-x-0 top-[-25%] h-[150%] w-full">
+      <div
+        ref={parallaxRef}
+        className="absolute inset-x-0 top-[-25%] h-[150%] w-full"
+      >
         <div ref={layerARef} className="absolute inset-0">
           <Image
             src={imageA.src}

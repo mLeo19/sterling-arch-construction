@@ -8,12 +8,7 @@ const nextConfig: NextConfig = {
     agentUpgrade: "security",
   },
   images: {
-    remotePatterns: [
-      {
-        protocol: "https",
-        hostname: "images.unsplash.com",
-      },
-    ],
+    qualities: [75, 90],
   },
   turbopack: {
     rules: {

@@ -56,16 +56,16 @@ export const services: Service[] = [
       },
     ],
     image: {
-      src: "https://images.unsplash.com/photo-1778961419928-2968ddd57c05?q=80&w=1600&auto=format&fit=crop",
+      src: "/images/photo-1778961419928-2968ddd57c05.jpg",
       alt: "Downtown commercial office tower exterior at sunset",
     },
     duo: [
       {
-        src: "https://images.unsplash.com/photo-1757213576496-1a43a6fe7a43?q=80&w=1400&auto=format&fit=crop",
+        src: "/images/photo-1757213576496-1a43a6fe7a43.jpg",
         alt: "Curved modern glass building facade",
       },
       {
-        src: "https://images.unsplash.com/photo-1780369088190-914cc3eee938?q=80&w=1400&auto=format&fit=crop",
+        src: "/images/photo-1780369088190-914cc3eee938.jpg",
         alt: "Spacious modern office lobby with reflective floor and columns",
       },
     ],
@@ -113,16 +113,16 @@ export const services: Service[] = [
       },
     ],
     image: {
-      src: "https://images.unsplash.com/photo-1482996207824-b0f01de61751?q=80&w=1600&auto=format&fit=crop",
+      src: "/images/photo-1482996207824-b0f01de61751.jpg",
       alt: "Wave-like glass and steel curtain wall facade detail",
     },
     duo: [
       {
-        src: "https://images.unsplash.com/photo-1744735973756-b2efa8be24c8?q=80&w=1400&auto=format&fit=crop",
+        src: "/images/photo-1744735973756-b2efa8be24c8.jpg",
         alt: "Welder joining structural steel with bright sparks",
       },
       {
-        src: "https://images.unsplash.com/photo-1771607906126-2158d563bc6c?q=80&w=1400&auto=format&fit=crop",
+        src: "/images/photo-1771607906126-2158d563bc6c.jpg",
         alt: "Modern waterfront apartment buildings with balconies",
       },
     ],
@@ -174,16 +174,16 @@ export const services: Service[] = [
       },
     ],
     image: {
-      src: "https://images.unsplash.com/photo-1706808849780-7a04fbac83ef?q=80&w=1600&auto=format&fit=crop",
+      src: "/images/photo-1706808849780-7a04fbac83ef.jpg",
       alt: "Modern upscale house exterior with pool and lounge chairs",
     },
     duo: [
       {
-        src: "https://images.unsplash.com/photo-1740446569677-a79c3186a16b?q=80&w=1400&auto=format&fit=crop",
+        src: "/images/photo-1740446569677-a79c3186a16b.jpg",
         alt: "Renovated interior with exposed brick wall and loft bed",
       },
       {
-        src: "https://images.unsplash.com/photo-1787653916679-044d55759cd0?q=80&w=1400&auto=format&fit=crop",
+        src: "/images/photo-1787653916679-044d55759cd0.jpg",
         alt: "Weathered red brick industrial building exterior",
       },
     ],
@@ -231,16 +231,16 @@ export const services: Service[] = [
       },
     ],
     image: {
-      src: "https://images.unsplash.com/photo-1740446569677-a79c3186a16b?q=80&w=1600&auto=format&fit=crop",
+      src: "/images/photo-1740446569677-a79c3186a16b.jpg",
       alt: "Renovated interior with exposed brick wall and loft bed",
     },
     duo: [
       {
-        src: "https://images.unsplash.com/photo-1523550558441-d1f0fd3575d1?q=80&w=1400&auto=format&fit=crop",
+        src: "/images/photo-1523550558441-d1f0fd3575d1.jpg",
         alt: "Scaffolding beside a brown brick historic building",
       },
       {
-        src: "https://images.unsplash.com/photo-1787653916679-044d55759cd0?q=80&w=1400&auto=format&fit=crop",
+        src: "/images/photo-1787653916679-044d55759cd0.jpg",
         alt: "Weathered red brick industrial building exterior",
       },
     ],
@@ -288,16 +288,16 @@ export const services: Service[] = [
       },
     ],
     image: {
-      src: "https://images.unsplash.com/photo-1782290547018-8bb89b8edf07?q=80&w=1600&auto=format&fit=crop",
+      src: "/images/photo-1782290547018-8bb89b8edf07.jpg",
       alt: "Architect's drafting table with transparent stool and wooden sawhorses",
     },
     duo: [
       {
-        src: "https://images.unsplash.com/photo-1778961419928-2968ddd57c05?q=80&w=1400&auto=format&fit=crop",
+        src: "/images/photo-1778961419928-2968ddd57c05.jpg",
         alt: "Downtown commercial office tower exterior at sunset",
       },
       {
-        src: "https://images.unsplash.com/photo-1757213576496-1a43a6fe7a43?q=80&w=1400&auto=format&fit=crop",
+        src: "/images/photo-1757213576496-1a43a6fe7a43.jpg",
         alt: "Curved modern glass building facade",
       },
     ],
