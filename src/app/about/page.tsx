@@ -23,7 +23,7 @@ export default function AboutPage() {
         intro="Sterling Arch Construction is a design-build general contractor working on commercial, institutional, and custom residential projects - ground-up builds and whole-building renovations for clients who plan to own the asset for decades."
       />
 
-      <section className="bg-white px-6 pb-20 sm:px-10 sm:pb-28">
+      <section className="bg-background px-6 pb-20 sm:px-10 sm:pb-28">
         <div className="mx-auto max-w-6xl">
           <Divider className="mb-16" />
           <RevealOnScroll className="grid grid-cols-1 gap-10 sm:grid-cols-4">
@@ -41,7 +41,7 @@ export default function AboutPage() {
         </div>
       </section>
 
-      <section className="bg-white px-6 pb-24 sm:px-10 sm:pb-32">
+      <section className="bg-background px-6 pb-24 sm:px-10 sm:pb-32">
         <RevealOnScroll className="mx-auto grid max-w-6xl grid-cols-1 items-start gap-10 sm:grid-cols-[280px_1fr] sm:gap-16">
           <div className="relative aspect-[3/4] overflow-hidden rounded-sm grayscale">
             <Image

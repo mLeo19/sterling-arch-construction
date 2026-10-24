@@ -4,13 +4,13 @@ import { useRef } from "react";
 import { gsap } from "@/lib/gsap";
 import { useGSAP } from "@gsap/react";
 import { useIntroReady } from "@/components/motion/IntroSequence";
-import { ease, pageTransitionRiseTime, pageTransitionState } from "@/lib/motion";
+import { duration, ease, pageTransitionRiseTime, pageTransitionState } from "@/lib/motion";
 
 export function RevealOnScroll({
   children,
   className = "",
   delay = 0,
-  y = 28,
+  y = 18,
 }: {
   children: React.ReactNode;
   className?: string;
@@ -40,8 +40,21 @@ export function RevealOnScroll({
       // time (pageTransitionRiseTime) closes that gap - same fix, same
       // reasoning as Hero.tsx's own text reveal.
       //
-      // Only on the initial load, though. On every subsequent navigation,
-      // an above-the-fold trigger's first real fire already lands after
+      // Scoped to only the instances that actually need it: elements
+      // already inside the "top 85%" trigger zone at this exact moment
+      // (mirroring the scrollTrigger start below), checked via a live
+      // getBoundingClientRect read since scrollY is still 0 here (`ready`
+      // flips before the user can have scrolled). A below-the-fold section
+      // doesn't fire until real, later user scrolling reaches it - however
+      // long after mount that happens to be - so it never needed this delay
+      // at all. Applying it unconditionally to every instance (the previous
+      // version) meant *every* section on the page, not just the one or two
+      // above the fold, carried a fixed ~0.9s tax on top of its own
+      // duration the instant its real trigger fired, which is what made
+      // scrolling through the page read as sluggish.
+      //
+      // Also only on the initial load. On every subsequent navigation, an
+      // above-the-fold trigger's first real fire already lands after
       // PageTransition's (much shorter) settle time on its own, via
       // ScrollTrigger's own refresh cycle - a just-created trigger's first
       // evaluation happens on the *next* refresh pass, not the synchronous
@@ -49,16 +62,24 @@ export function RevealOnScroll({
       // same delay to every navigation would just make an already-correct
       // case more sluggish for no reason.
       const isInitialLoad = !pageTransitionState.hasPlayedInitial;
-      const pageRevealDelay = isInitialLoad ? pageTransitionRiseTime(true) : 0;
+      const startsAboveTheFold = ref.current.getBoundingClientRect().top <= window.innerHeight * 0.85;
+      const pageRevealDelay =
+        isInitialLoad && startsAboveTheFold ? pageTransitionRiseTime(true) : 0;
+      // Quick, not a long settle - but outSoft (true power2/cubic), not the
+      // steeper outCubic/outQuart tokens: those are quartic/quintic-strength
+      // curves that front-load almost all of the motion into the opening
+      // few frames at a duration this short, reading as a near-instant pop
+      // rather than a smooth fade. outSoft keeps the same quick duration but
+      // spreads the deceleration out enough to still read as motion.
       gsap.fromTo(
         ref.current,
         { opacity: 0, y },
         {
           opacity: 1,
           y: 0,
-          duration: 0.9,
+          duration: duration.fast,
           delay: pageRevealDelay + delay,
-          ease: ease.outQuart,
+          ease: ease.outSoft,
           scrollTrigger: {
             trigger: ref.current,
             start: "top 85%",

@@ -1,7 +1,11 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
+  /* fluid.glass's own literal value (their --color-cream custom property,
+     read straight out of their shipped CSS) - a warm off-white instead of
+     paper-stark #fff, used as this site's base background everywhere
+     bg-background appears. */
+  --background: #f3f0ec;
   --foreground: #171717;
 
   /* Named easing curves, reused across plain CSS transitions (GSAP tweens

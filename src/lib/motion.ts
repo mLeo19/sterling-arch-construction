@@ -4,13 +4,24 @@
 export const ease = {
   outQuart: "power4.out",
   outCubic: "power3.out",
+  // A genuinely gentler out-curve than outCubic above despite the name
+  // similarity - GSAP's "power3" is quartic-strength, not cubic, so
+  // outCubic's actual deceleration is steeper/shorter-tailed than its name
+  // implies. outSoft is true cubic (power2), which is what a short (~0.4s)
+  // fade+rise needs to read as smooth motion rather than a near-instant pop
+  // followed by a barely-visible tail - see RevealOnScroll.tsx.
+  outSoft: "power2.out",
   inOutCubic: "power3.inOut",
   inOutQuart: "power4.inOut",
   transition: "power4.inOut",
+  // GSAP's closest token to plain CSS "ease-in-out" - used for the menu's
+  // page-dimming backdrop (see MenuOverlay.tsx), matching fluid.glass's own
+  // `transition: opacity 1s ease-in-out` on that element exactly.
+  inOutSoft: "power1.inOut",
 } as const;
 
 export const duration = {
-  fast: 0.4,
+  fast: 0.45,
   base: 0.7,
   slow: 1.1,
 } as const;

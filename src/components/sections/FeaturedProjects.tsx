@@ -8,7 +8,7 @@ import { ProjectRow } from "@/components/projects/ProjectRow";
 
 export function FeaturedProjects() {
   return (
-    <section className="bg-white px-6 py-20 sm:px-10 sm:py-24">
+    <section className="bg-background px-6 py-20 sm:px-10 sm:py-24">
       <div className="mx-auto max-w-6xl">
         <Divider className="mb-10" />
         <Eyebrow className="mb-6">Featured Projects</Eyebrow>

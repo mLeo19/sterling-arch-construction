@@ -21,7 +21,7 @@ export default function ServicesPage() {
         intro="From first sketch to final walkthrough, our service collection covers ground-up construction, structural glazing, renovation, and design-build - all carried by the same team, start to finish."
       />
 
-      <section className="bg-white px-6 pb-24 sm:px-10 sm:pb-32">
+      <section className="bg-background px-6 pb-24 sm:px-10 sm:pb-32">
         <div className="mx-auto flex max-w-6xl flex-col gap-20 sm:gap-28">
           {services.map((service, index) => (
             <RevealOnScroll

@@ -6,7 +6,7 @@ import { RevealOnScroll } from "@/components/motion/RevealOnScroll";
 
 export function ClosingCta() {
   return (
-    <section className="bg-white px-6 pt-4 pb-20 sm:px-10 sm:pb-28">
+    <section className="bg-background px-6 pt-4 pb-20 sm:px-10 sm:pb-28">
       <div className="mx-auto max-w-6xl">
         <div className="flex justify-end pb-10">
           <span className="font-mono text-[0.7rem] tracking-[0.1em] text-black/50 uppercase">

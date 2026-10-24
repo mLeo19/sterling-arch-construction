@@ -114,6 +114,64 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   // and if a second navigation interrupts this one before that happens.
   const scrollGuardRef = useRef<(() => void) | null>(null);
 
+  // The scroll position to animate to once the entrance transition fully
+  // settles on a hard reload - fluid.glass's own refresh behavior (intro
+  // plays normally, pane rises, *then* it scrolls down to where you were)
+  // rather than either landing at the top or skipping the entrance
+  // animation entirely. Read synchronously here, during the component's
+  // very first render, rather than in an effect - this has to win a race
+  // against the entrance effect's own resetScroll() (below), which fires
+  // from a useGSAP effect and would otherwise flush scrollY to 0 and emit a
+  // real 'scroll' event before this component ever gets a chance to read
+  // the pre-reload position for itself. Reading inline during render, not
+  // lazily in a useState initializer, trips React's "don't read/write refs
+  // during render" lint rule - a plain mutable ref assigned straight in the
+  // function body like this is the one exception that's actually safe:
+  // nothing here is derived from props/state in a way a re-render could
+  // legitimately change, and the `=== undefined` guard makes the whole
+  // block run exactly once, on mount, like a lazy ref initializer would.
+  // undefined = "not checked yet" (checked exactly once, right here);
+  // null = "checked, nothing worth restoring"; otherwise the {pathname, y}
+  // this reload's hard-load capture was taken for - stamped with pathname
+  // so a navigation that interrupts this same reload's own entrance
+  // animation (before the hold loop below ever gets to consume it) can't
+  // later misapply a stale position meant for this pathname to a different
+  // one once that *next* transition's own hold loop completes instead.
+  const restoreScrollRef = useRef<{ pathname: string; y: number } | null | undefined>(
+    undefined,
+  );
+  if (restoreScrollRef.current === undefined) {
+    restoreScrollRef.current = (() => {
+      if (typeof window === "undefined") return null;
+      const raw = window.sessionStorage.getItem(`scrollY:${pathname}`);
+      const y = raw ? Number(raw) : NaN;
+      return Number.isFinite(y) && y > 0 ? { pathname, y } : null;
+    })();
+  }
+
+  // Keeps that same sessionStorage slot current while the user actually
+  // scrolls, so whatever's there is always recent enough to restore from on
+  // the next hard reload - not written just once on unload, which mobile
+  // Safari in particular doesn't reliably fire before a reload discards the
+  // page. rAF-coalesced, the same pattern as SiteNav's own atBottom scroll
+  // listener, so a continuous scroll writes at most once per frame rather
+  // than on every raw scroll event.
+  useEffect(() => {
+    const KEY = `scrollY:${pathname}`;
+    let ticking = false;
+    function save() {
+      ticking = false;
+      window.sessionStorage.setItem(KEY, String(window.scrollY));
+    }
+    function onScroll() {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(save);
+    }
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [pathname]);
+
   // Belt-and-suspenders alongside the resetScroll()/rAF re-assertion
   // further down: turns off the browser's *native* scroll restoration, in
   // case that's ever the one racing the reset on a given browser. The real
@@ -363,6 +421,16 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
 
       if (prefersReducedMotion) {
         release();
+        // No hold loop on this path (nothing animates, so there's nothing
+        // for residual scroll input to race against) - restore straight
+        // after release()'s own resetScroll(), same pathname-match guard as
+        // the animated path below, instant rather than smooth since this
+        // whole branch exists specifically to skip motion.
+        const restore = restoreScrollRef.current;
+        if (isInitialLoad && restore && restore.pathname === pathname) {
+          restoreScrollRef.current = null;
+          window.scrollTo({ top: restore.y, behavior: "instant" });
+        }
         return;
       }
 
@@ -446,12 +514,31 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       const HOLD_FRAMES = 120; // ~2s at 60fps
       let framesLeft = HOLD_FRAMES;
       let holdRafId: number | null = null;
+      // Belt-and-suspenders alongside resetScroll() above: Lenis's own
+      // isStopped gate already preventDefaults wheel/touch input for the
+      // whole hold (see lenis.mjs's onVirtualScroll), but that's only the
+      // gesture-driven paths it listens for - keyboard scroll (Space/Page
+      // Down/arrow keys), a dragged scrollbar thumb, and middle-click
+      // autoscroll all move window.scrollY natively, outside Lenis
+      // entirely. document.body.style.overflow = "hidden" blocks all of
+      // those the same way SiteNav's own mobile-menu lock does (the
+      // body->viewport overflow propagation quirk - confirmed not to
+      // disturb position:sticky the way toggling <html>'s own overflow
+      // does, see the doc comment on the Lenis-stopped override in
+      // globals.css). Re-applied every tick below, not just set once here -
+      // SiteNav's own close-the-menu effect unconditionally clears this
+      // same property the instant a menu-triggered nav link closes the
+      // panel (see its `else` branch), which races this hold on exactly
+      // the "click a link while the auto-opened footer menu is up" path.
+      // Whichever one last wrote the property wins until the next frame,
+      // same tolerance the scrollY reassertion below already accepts.
+      document.body.style.overflow = "hidden";
       // Only cancels the rAF loop and clears the ref - does NOT resume
-      // Lenis. Used for both the natural-completion and interrupted-by-a-
-      // new-nav paths; the latter must leave Lenis stopped, since resuming
-      // it here would momentarily re-open the isStopped gate on wheel input
-      // in the gap before the new navigation's own captureSnapshot gets a
-      // chance to call stop() again.
+      // Lenis or restore body's overflow. Used for both the natural-
+      // completion and interrupted-by-a-new-nav paths; the latter must
+      // leave both Lenis and this lock in place, since releasing either
+      // here would momentarily reopen scrolling in the gap before the new
+      // navigation's own entrance effect gets a chance to re-lock.
       const stopHold = () => {
         if (holdRafId !== null) cancelAnimationFrame(holdRafId);
         holdRafId = null;
@@ -459,13 +546,34 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       };
       const holdTick = () => {
         if (window.scrollY !== 0) resetScroll();
+        document.body.style.overflow = "hidden";
         framesLeft -= 1;
         if (framesLeft <= 0) {
           stopHold();
-          // The one place Lenis actually resumes - only reached when the
+          // The one place either actually releases - only reached when the
           // hold ran its full, uninterrupted course, meaning no navigation
           // preempted it and residual momentum has long since decayed.
+          document.body.style.overflow = "";
           lenisRef?.current?.start();
+          // Only after the hold has fully released, and only on the exact
+          // hard reload restoreScrollRef's own render-time read captured
+          // this for (see its doc comment) - a navigation that interrupted
+          // this same reload's entrance before reaching here leaves the ref
+          // holding a position stamped for a pathname that no longer
+          // matches, so it's silently dropped rather than misapplied to
+          // wherever the user actually landed instead.
+          const restore = restoreScrollRef.current;
+          if (isInitialLoad && restore && restore.pathname === pathname) {
+            restoreScrollRef.current = null;
+            if (lenisRef?.current) {
+              lenisRef.current.scrollTo(restore.y);
+            } else {
+              window.scrollTo({
+                top: restore.y,
+                behavior: prefersReducedMotion ? "instant" : "smooth",
+              });
+            }
+          }
           return;
         }
         holdRafId = requestAnimationFrame(holdTick);

@@ -6,7 +6,7 @@ import { gsap } from "@/lib/gsap";
 import { useGSAP } from "@gsap/react";
 import { testimonials } from "@/lib/data/testimonials";
 import { Eyebrow } from "@/components/ui/Eyebrow";
-import { ease } from "@/lib/motion";
+import { duration, ease } from "@/lib/motion";
 
 export function Testimonials() {
   const [index, setIndex] = useState(0);
@@ -20,7 +20,7 @@ export function Testimonials() {
       gsap.fromTo(
         contentRef.current,
         { opacity: 0, y: 12 },
-        { opacity: 1, y: 0, duration: 0.5, ease: ease.outQuart }
+        { opacity: 1, y: 0, duration: duration.fast, ease: ease.outSoft }
       );
     },
     { dependencies: [index], scope: contentRef }
@@ -31,7 +31,7 @@ export function Testimonials() {
   }
 
   return (
-    <section className="bg-white px-6 py-20 sm:px-10 sm:py-24">
+    <section className="bg-background px-6 py-20 sm:px-10 sm:py-24">
       <div className="mx-auto max-w-5xl">
         <div className="flex items-center justify-between border-b border-black/10 pb-6">
           <Eyebrow>Client Stories</Eyebrow>

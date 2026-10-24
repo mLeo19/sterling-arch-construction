@@ -174,7 +174,7 @@ function IntroLoader({ onReady }: { onReady: () => void }) {
     <div
       ref={overlayRef}
       aria-hidden
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-white opacity-100"
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-background opacity-100"
     >
       <div ref={groupRef} className="flex items-center gap-4 opacity-0">
         <div className="relative h-14 w-14" style={{ perspective: 600 }}>

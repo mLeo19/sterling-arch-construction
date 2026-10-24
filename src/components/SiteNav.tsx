@@ -44,6 +44,24 @@ export function SiteNav() {
   // which the pill-collapse useGSAP effect above also reads and clears on
   // the same `open` transition before this plain useEffect gets to it.
   const navigatingRef = useRef(false);
+  // True while the current `open: true` state was caused by scrolling to the
+  // very bottom of the page (see the atBottom effect below), not a manual
+  // click - read by the scroll-lock effect to skip locking in that case, and
+  // cleared on every manual toggle so a deliberate click always behaves like
+  // an ordinary, lockable open. Also passed down to MenuOverlay, which reads
+  // it to skip darkening the backdrop behind the panel - the full-screen
+  // Footer the menu is opening over already reads as a dark backdrop on its
+  // own (see Footer.tsx), so a second darken-on-top there would double up.
+  const openedByBottomRef = useRef(false);
+  // Mirrors `open` for the scroll-listener effect below, which only runs
+  // its setup once (empty dep array - re-subscribing on every open/close
+  // would be wasteful) but still needs the *current* open state at the
+  // moment a real scroll event fires, not whatever `open` was when the
+  // listener was first attached.
+  const openRef = useRef(open);
+  useEffect(() => {
+    openRef.current = open;
+  }, [open]);
 
   if (pathname !== previousPathname) {
     setPreviousPathname(pathname);
@@ -58,15 +76,74 @@ export function SiteNav() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, []);
 
+  // Opens the nav the moment the page is scrolled all the way to its
+  // bottom, and closes it again on scrolling back up off that - fluid.
+  // glass's own footer (a full-viewport-height section, see Footer.tsx)
+  // reads as "the end of the page," and reaching it auto-opens this nav so
+  // there's always a way forward from there. Plain window scroll, not a
+  // ScrollTrigger - this has to work identically whether Lenis is driving
+  // scroll (desktop) or the browser is (touch/reduced-motion, see
+  // SmoothScroll.tsx), and both ultimately move the real window scrollY.
+  // rAF-coalesced so a scroll event doesn't synchronously recompute layout
+  // more than once per frame. setOpen is only ever called from inside this
+  // rAF callback - an external-system subscription reacting to a real
+  // browser event, not a synchronous effect body - so it doesn't cascade
+  // into a second render the way deriving `open` from an intermediate
+  // `atBottom` *state* (set directly in the effect body) would have.
+  useEffect(() => {
+    const EPSILON = 2;
+    let ticking = false;
+    let wasAtBottom = false;
+    function check() {
+      ticking = false;
+      const atBottom =
+        window.scrollY + window.innerHeight >=
+        document.documentElement.scrollHeight - EPSILON;
+      if (atBottom === wasAtBottom) return;
+      wasAtBottom = atBottom;
+      if (atBottom) {
+        if (!openRef.current) {
+          openedByBottomRef.current = true;
+          setOpen(true);
+        }
+      } else if (openedByBottomRef.current) {
+        openedByBottomRef.current = false;
+        setOpen(false);
+      }
+    }
+    function onScroll() {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(check);
+    }
+    // Deferred through rAF rather than called directly here too - keeps
+    // every setOpen call routed through an async callback, never the
+    // effect's own synchronous body, even for the initial on-mount check.
+    requestAnimationFrame(check);
+    window.addEventListener("scroll", onScroll, { passive: true });
+    window.addEventListener("resize", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, []);
+
   // Lock page scroll while the mobile menu is open. `overflow:hidden` alone
   // covers touch/keyboard scrolling regardless of whether Lenis is even
   // running (it's never created on touch devices - see SmoothScroll.tsx);
   // stopping Lenis on top of that halts its own rAF-driven scrollTop writes
   // so it doesn't fight the lock on devices where it is running.
+  //
+  // Skipped entirely when this open state came from reaching the bottom of
+  // the page (openedByBottomRef) - that's not a modal takeover the way a
+  // manually-opened menu is, and the user still needs to be able to scroll
+  // back up to close it again (which the atBottom effect above depends on).
   useEffect(() => {
     if (open) {
-      lenisRef?.current?.stop();
-      document.body.style.overflow = "hidden";
+      if (!openedByBottomRef.current) {
+        lenisRef?.current?.stop();
+        document.body.style.overflow = "hidden";
+      }
     } else {
       document.body.style.overflow = "";
       if (navigatingRef.current) {
@@ -76,9 +153,10 @@ export function SiteNav() {
         // start() here too would reopen the stopped gate on wheel/touch
         // input while that loop is still trying to hold scroll at 0.
         navigatingRef.current = false;
-      } else {
+      } else if (!openedByBottomRef.current) {
         lenisRef?.current?.start();
       }
+      openedByBottomRef.current = false;
     }
     return () => {
       document.body.style.overflow = "";
@@ -456,7 +534,15 @@ export function SiteNav() {
             <button
               ref={buttonRef}
               type="button"
-              onClick={() => setOpen((v) => !v)}
+              onClick={() => {
+                // Any direct click is a deliberate, manual toggle - even if
+                // the nav happens to currently be open because the page is
+                // scrolled to the bottom, clicking here should behave like
+                // an ordinary open/close from here on, not stay tied to the
+                // atBottom effect above.
+                openedByBottomRef.current = false;
+                setOpen((v) => !v);
+              }}
               aria-expanded={open}
               aria-label={open ? "Close menu" : "Open menu"}
               className="flex h-[13.333vw] w-[13.333vw] shrink-0 items-center justify-center text-white transition-opacity duration-300 hover:opacity-70 sm:h-[3.125vw] sm:w-[3.125vw]"
@@ -505,6 +591,7 @@ export function SiteNav() {
         open={open}
         returnFocusRef={buttonRef}
         skipCloseAnimRef={skipCloseAnimRef}
+        openedByBottomRef={openedByBottomRef}
         onClose={() => setOpen(false)}
         onNavigate={() => {
           skipCloseAnimRef.current = true;

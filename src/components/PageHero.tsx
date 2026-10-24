@@ -19,7 +19,7 @@ export function PageHero({
   intro?: string;
 }) {
   return (
-    <section className="bg-white px-6 pt-40 pb-16 sm:px-10 sm:pt-48 sm:pb-20">
+    <section className="bg-background px-6 pt-40 pb-16 sm:px-10 sm:pt-48 sm:pb-20">
       <div className="mx-auto max-w-4xl">
         <Eyebrow className="mb-6">{eyebrow}</Eyebrow>
         <SectionHeading>{heading}</SectionHeading>

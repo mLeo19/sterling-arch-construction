@@ -39,7 +39,7 @@ export function ServicesCollection() {
   const [first, ...rest] = services;
 
   return (
-    <section className="bg-white px-6 py-20 sm:px-10 sm:py-24">
+    <section className="bg-background px-6 pt-20 pb-32 sm:px-10 sm:pt-24 sm:pb-60">
       <div className="mx-auto max-w-6xl">
         <div className="mb-12 flex items-center justify-between gap-4">
           <Eyebrow>Service Collection</Eyebrow>
@@ -64,6 +64,18 @@ export function ServicesCollection() {
           </div>
         </RevealOnScroll>
 
+        {/* mt-16 + the cards' own max static translate-y-36 (9rem) and
+            ±15% parallax swing need real room below them before the next
+            section's own (opaque, bg-black) box starts - a plain sm:py-24
+            on this section left only 6rem of bottom padding, well short of
+            that travel, so the lowest card's scrolled-down pose visibly
+            overlapped/got painted over by CraftShowcase as you scrolled
+            past. fluid.glass's own equivalent bento section (their
+            .product-collection, margin:15rem 0 desktop / 8rem mobile - read
+            straight out of their shipped CSS) reserves exactly this much
+            room around a layout with even larger per-card offsets, so
+            pb-32/sm:pb-60 (8rem/15rem) matches their real numbers rather
+            than a guessed buffer. */}
         <div className="mt-16 grid grid-cols-2 gap-6 sm:grid-cols-4 sm:gap-10">
           {rest.map((service, index) => {
             const config = cardConfig[index];
@@ -96,14 +108,18 @@ function ServiceCard({
 }) {
   return (
     <div
-      className={`relative overflow-hidden rounded-sm ${large ? "aspect-[4/3]" : aspect}`}
+      // group, not a GSAP hover handler - this is a single-property hover
+      // transform, the same kind ProjectRow/ProjectDuo's own hover states
+      // already use plain Tailwind transitions for, not GSAP (reserved in
+      // this project for scroll/entrance/multi-element orchestration).
+      className={`group relative overflow-hidden rounded-sm ${large ? "aspect-[4/3]" : aspect}`}
     >
       <Image
         src={service.image.src}
         alt={service.image.alt}
         fill
         sizes={large ? "(min-width: 640px) 50vw, 100vw" : "(min-width: 640px) 25vw, 50vw"}
-        className="object-cover"
+        className="object-cover transition-transform duration-700 ease-out group-hover:scale-110"
       />
       <div className="absolute inset-0 bg-black/30" />
       <div className="absolute inset-0 flex items-center justify-center p-4 text-center">

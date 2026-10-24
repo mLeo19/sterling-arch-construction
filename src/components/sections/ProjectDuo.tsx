@@ -7,25 +7,25 @@ export function ProjectDuo() {
   const project = projects[0];
 
   return (
-    <section className="bg-white px-6 pb-20 sm:px-10 sm:pb-24">
+    <section className="bg-background px-6 pb-20 sm:px-10 sm:pb-24">
       <div className="mx-auto max-w-6xl">
         <RevealOnScroll className="grid grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
-          <div className="relative aspect-[4/5] overflow-hidden rounded-sm">
+          <div className="group relative aspect-[4/5] overflow-hidden rounded-sm">
             <Image
               src={project.duo[0].src}
               alt={project.duo[0].alt}
               fill
               sizes="(min-width: 640px) 50vw, 100vw"
-              className="object-cover"
+              className="object-cover transition-transform duration-700 ease-out group-hover:scale-110"
             />
           </div>
-          <div className="relative aspect-[4/5] overflow-hidden rounded-sm sm:mt-12">
+          <div className="group relative aspect-[4/5] overflow-hidden rounded-sm sm:mt-12">
             <Image
               src={project.duo[1].src}
               alt={project.duo[1].alt}
               fill
               sizes="(min-width: 640px) 50vw, 100vw"
-              className="object-cover"
+              className="object-cover transition-transform duration-700 ease-out group-hover:scale-110"
             />
           </div>
         </RevealOnScroll>

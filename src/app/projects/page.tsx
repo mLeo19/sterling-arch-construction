@@ -18,7 +18,7 @@ export default function ProjectsPage() {
         heading="A portfolio built on precision, not spectacle."
         intro="Every project below was designed and built by the same team, start to finish - no subcontracted design, no handoffs between strangers."
       />
-      <section className="bg-white px-6 pb-24 sm:px-10 sm:pb-32">
+      <section className="bg-background px-6 pb-24 sm:px-10 sm:pb-32">
         <div className="mx-auto max-w-6xl border-t border-black/10">
           {projects.map((project) => (
             <ProjectRow key={project.slug} project={project} reveal={false} />

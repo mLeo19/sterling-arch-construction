@@ -56,7 +56,7 @@ export default async function ProjectPage(props: PageProps<"/projects/[slug]">) 
         </div>
       </section>
 
-      <section className="bg-white px-6 py-16 sm:px-10 sm:py-20">
+      <section className="bg-background px-6 py-16 sm:px-10 sm:py-20">
         <div className="mx-auto max-w-6xl">
           <RevealOnScroll className="grid grid-cols-1 gap-10 sm:grid-cols-[1fr_2fr]">
             <div className="flex flex-col gap-6">
@@ -81,7 +81,7 @@ export default async function ProjectPage(props: PageProps<"/projects/[slug]">) 
         </div>
       </section>
 
-      <section className="bg-white px-6 pb-16 sm:px-10 sm:pb-20">
+      <section className="bg-background px-6 pb-16 sm:px-10 sm:pb-20">
         <RevealOnScroll className="mx-auto grid max-w-6xl grid-cols-1 gap-4 sm:grid-cols-2 sm:gap-6">
           <div className="relative aspect-[4/5] overflow-hidden rounded-sm">
             <Image
@@ -104,7 +104,7 @@ export default async function ProjectPage(props: PageProps<"/projects/[slug]">) 
         </RevealOnScroll>
       </section>
 
-      <section className="bg-white px-6 pb-20 sm:px-10 sm:pb-28">
+      <section className="bg-background px-6 pb-20 sm:px-10 sm:pb-28">
         <RevealOnScroll className="mx-auto grid max-w-6xl grid-cols-1 gap-4 sm:grid-cols-3">
           {project.gallery.map((image, i) => (
             <div
@@ -123,7 +123,7 @@ export default async function ProjectPage(props: PageProps<"/projects/[slug]">) 
         </RevealOnScroll>
       </section>
 
-      <section className="bg-white px-6 pb-20 sm:px-10 sm:pb-28">
+      <section className="bg-background px-6 pb-20 sm:px-10 sm:pb-28">
         <div className="mx-auto flex max-w-6xl items-center justify-between border-t border-black/10 pt-8">
           <span className="font-mono text-xs tracking-[0.1em] text-black/50 uppercase">
             Next project

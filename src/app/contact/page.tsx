@@ -20,7 +20,7 @@ export default function ContactPage() {
         intro="Tell us about the project, the site, and the timeline - we'll follow up within one business day to schedule a first walkthrough."
       />
 
-      <section className="bg-white px-6 pb-28 sm:px-10 sm:pb-36">
+      <section className="bg-background px-6 pb-28 sm:px-10 sm:pb-36">
         <div className="mx-auto grid max-w-6xl grid-cols-1 gap-16 sm:grid-cols-[1fr_1.4fr]">
           <RevealOnScroll className="flex flex-col gap-10">
             <div>

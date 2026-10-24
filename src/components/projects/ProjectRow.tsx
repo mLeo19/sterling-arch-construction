@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import type { Project } from "@/lib/data/projects";
 import { Tag } from "@/components/ui/Tag";
@@ -22,7 +23,7 @@ export function ProjectRow({
   const row = (
     <Link
       href={`/projects/${project.slug}`}
-      className="group flex flex-col gap-3 border-b border-black/10 py-6 transition-colors duration-300 hover:bg-black/[0.03] sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-2"
+      className="group relative flex flex-col gap-3 border-b border-black/10 py-6 transition-colors duration-300 hover:bg-black/[0.03] sm:flex-row sm:items-center sm:justify-between sm:gap-6 sm:px-2"
     >
       <span className="text-2xl font-medium text-black/50 transition-colors duration-300 group-hover:text-black sm:w-64 sm:shrink-0">
         {project.title}
@@ -38,6 +39,26 @@ export function ProjectRow({
       >
         ↳
       </span>
+
+      {/* Desktop-only reveal thumbnail - fluid.glass's own "Featured
+          projects" treats this list as imagery, not plain text (the bento
+          grid's zoom-on-hover, reused here: same transition-transform +
+          group-hover:scale-110 on the image itself, see ServiceCard/
+          ProjectDuo). pointer-events-none since the whole row is already
+          the click target; absolute/hidden on mobile where there's no
+          spare width for it to land without fighting the stacked tags. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute top-1/2 right-16 z-10 hidden h-28 w-44 -translate-y-1/2 translate-x-3 scale-90 overflow-hidden rounded-sm opacity-0 shadow-xl transition-all duration-500 ease-out group-hover:translate-x-0 group-hover:scale-100 group-hover:opacity-100 sm:block"
+      >
+        <Image
+          src={project.heroImage.src}
+          alt=""
+          fill
+          sizes="176px"
+          className="object-cover transition-transform duration-700 ease-out group-hover:scale-110"
+        />
+      </div>
     </Link>
   );
 
