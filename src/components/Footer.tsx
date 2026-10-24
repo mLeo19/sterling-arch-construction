@@ -8,6 +8,7 @@ import { gsap } from "@/lib/gsap";
 import { site } from "@/lib/data/site";
 import { getProject, projects } from "@/lib/data/projects";
 import { services } from "@/lib/data/services";
+import { heroImage as APPROACH_IMAGE } from "@/lib/data/approach";
 import { Button } from "@/components/ui/Button";
 import { ease } from "@/lib/motion";
 
@@ -38,6 +39,7 @@ function footerImageFor(pathname: string): FooterImage {
   }
   if (pathname === "/projects") return projects[0].heroImage;
   if (pathname === "/services") return services[0].image;
+  if (pathname === "/approach") return APPROACH_IMAGE;
   if (pathname === "/about") return ABOUT_IMAGE;
   if (pathname === "/contact") {
     return services.find((s) => s.slug === "design-build")?.image ?? HOME_IMAGE;

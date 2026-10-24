@@ -15,6 +15,7 @@ const sectionLabels: Record<string, string> = {
   "/": "Home",
   "/projects": "Projects",
   "/services": "Services",
+  "/approach": "Approach",
   "/about": "About",
   "/contact": "Contact",
 };

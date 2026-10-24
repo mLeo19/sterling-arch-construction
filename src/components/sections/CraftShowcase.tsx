@@ -32,7 +32,7 @@ export function CraftShowcase() {
                 {site.address.line2}
               </p>
             </div>
-            <Button href="/about" variant="secondary" tone="light">
+            <Button href="/approach" variant="secondary" tone="light">
               Our Process
             </Button>
           </div>
