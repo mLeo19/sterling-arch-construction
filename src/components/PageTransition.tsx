@@ -204,6 +204,59 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     // a wrong compensating offset into the clone.
     const scrollY = window.scrollY;
 
+    // position:sticky's "stuck" offset is a live browser layout calculation
+    // tied to actual scroll position within its real scrolling ancestor -
+    // cloneNode copies the DOM/inline styles, but not that computed offset.
+    // Once reattached inside this snapshot's own fixed + translateY wrapper
+    // below (a completely different scroll context: nothing ever actually
+    // scrolls it), the browser recomputes each cloned sticky element's
+    // position fresh against that new context and it visibly snaps - the
+    // "pinned component jumps the instant a page transition starts" bug
+    // this fixes (PinnedScale.tsx, ApproachHero.tsx, ApproachProcess.tsx -
+    // every sticky-pinned, scroll-scrubbed component in the project).
+    // Every other (non-sticky) element in the clone doesn't need this: its
+    // on-screen position already falls out correctly from the single
+    // wrapper-level translateY(-scrollY) below, equivalent to "where it was
+    // relative to the document, minus how far the page had scrolled."
+    // Sticky elements don't follow that same document-relative math - their
+    // own `top` offset is itself a function of scroll - so their current,
+    // already-resolved on-screen rect is measured and baked in explicitly
+    // instead, before cloning.
+    function freezeStickyPositions(liveRoot: HTMLElement, cloneRoot: HTMLElement) {
+      const liveStickyEls = liveRoot.querySelectorAll<HTMLElement>(".sticky");
+      const cloneStickyEls = cloneRoot.querySelectorAll<HTMLElement>(".sticky");
+      liveStickyEls.forEach((liveNode, i) => {
+        const cloneNode = cloneStickyEls[i];
+        if (!cloneNode) return;
+        const rect = liveNode.getBoundingClientRect();
+        // fixed, not absolute: this element's own normal-flow parent (the
+        // tall pin wrapper, e.g. PinnedScale's own "relative h-[...]" div)
+        // is itself position:relative, which - having no transform of its
+        // own - doesn't qualify as a containing block for position:fixed,
+        // but DOES for position:absolute (any non-static position counts
+        // there). An absolute override was landing on that nearer wrapper
+        // instead of contentClone below, resolving `top` against the wrong
+        // origin entirely. Fixed positioning's containing-block search only
+        // stops at a transformed ancestor - contentClone always carries one
+        // here (even a visually neutral one; see this file's own top-level
+        // doc comment on why that's permanent), so this lands exactly where
+        // intended regardless of how deeply this element is nested.
+        //
+        // Document-relative top (rect.top + scrollY), not the
+        // viewport-relative rect.top alone - the wrapper's own
+        // translateY(-scrollY) below subtracts scrollY back out of every
+        // descendant uniformly, so adding it back in here is what makes the
+        // two cancel out to exactly the on-screen position being frozen.
+        cloneNode.classList.remove("sticky", "top-0");
+        cloneNode.style.position = "fixed";
+        cloneNode.style.top = `${rect.top + scrollY}px`;
+        cloneNode.style.left = `${rect.left}px`;
+        cloneNode.style.width = `${rect.width}px`;
+        cloneNode.style.height = `${rect.height}px`;
+        cloneNode.style.margin = "0";
+      });
+    }
+
     // The real page is el's content immediately followed by the persistent
     // Footer - a sibling of el (see layout.tsx), not a descendant of it. A
     // clone of el alone has no content for the space Footer actually
@@ -211,10 +264,16 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     // Cloning the Footer too and stacking it directly after the content
     // clone - the same order they already render in - gives the composite
     // clone real content for that whole range.
-    const footerEl = document.querySelector("footer");
+    const footerEl = document.querySelector<HTMLElement>("footer");
     const wrapper = document.createElement("div");
-    wrapper.appendChild(el.cloneNode(true));
-    if (footerEl) wrapper.appendChild(footerEl.cloneNode(true));
+    const contentClone = el.cloneNode(true) as HTMLElement;
+    freezeStickyPositions(el, contentClone);
+    wrapper.appendChild(contentClone);
+    if (footerEl) {
+      const footerClone = footerEl.cloneNode(true) as HTMLElement;
+      freezeStickyPositions(footerEl, footerClone);
+      wrapper.appendChild(footerClone);
+    }
 
     // Still clamped, defensively, against the *composite* height now rather
     // than el's own - this should rarely if ever actually reduce scrollY
