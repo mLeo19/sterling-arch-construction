@@ -14,6 +14,15 @@ export function generateStaticParams() {
   return projects.map((project) => ({ slug: project.slug }));
 }
 
+// Same reasoning as the services/[slug] route's own instant=false - every
+// pixel here depends on the resolved slug, so there's no param-independent
+// shell for a <Suspense> boundary to usefully stream content around.
+// generateStaticParams above still prerenders every known slug at build
+// time; this only opts out of the instant-navigation shell requirement for
+// client-side transitions. See
+// https://nextjs.org/docs/messages/instant-shell-url-data.
+export const instant = false;
+
 export async function generateMetadata(
   props: PageProps<"/projects/[slug]">
 ): Promise<Metadata> {

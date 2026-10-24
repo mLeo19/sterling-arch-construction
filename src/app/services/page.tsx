@@ -3,6 +3,7 @@ import Image from "next/image";
 import { services } from "@/lib/data/services";
 import { site } from "@/lib/data/site";
 import { PageHero } from "@/components/PageHero";
+import { Button } from "@/components/ui/Button";
 import { RevealOnScroll } from "@/components/motion/RevealOnScroll";
 import { ClosingCta } from "@/components/sections/ClosingCta";
 
@@ -30,13 +31,13 @@ export default function ServicesPage() {
                 index % 2 === 1 ? "sm:[&>*:first-child]:order-2" : ""
               }`}
             >
-              <div className="relative aspect-[4/3] overflow-hidden rounded-sm">
+              <div className="group relative aspect-[4/3] overflow-hidden rounded-sm">
                 <Image
                   src={service.image.src}
                   alt={service.image.alt}
                   fill
                   sizes="(min-width: 640px) 50vw, 100vw"
-                  className="object-cover"
+                  className="object-cover transition-transform duration-700 ease-out group-hover:scale-110"
                 />
               </div>
               <div>
@@ -49,6 +50,9 @@ export default function ServicesPage() {
                 <p className="mt-4 max-w-md text-base leading-relaxed text-black/70">
                   {service.blurb}
                 </p>
+                <Button href={`/services/${service.slug}`} variant="secondary" className="mt-6">
+                  View {service.label}
+                </Button>
               </div>
             </RevealOnScroll>
           ))}

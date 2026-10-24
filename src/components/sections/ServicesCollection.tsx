@@ -1,4 +1,5 @@
 import Image from "next/image";
+import Link from "next/link";
 import { services } from "@/lib/data/services";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { Button } from "@/components/ui/Button";
@@ -107,12 +108,13 @@ function ServiceCard({
   aspect?: string;
 }) {
   return (
-    <div
+    <Link
+      href={`/services/${service.slug}`}
       // group, not a GSAP hover handler - this is a single-property hover
       // transform, the same kind ProjectRow/ProjectDuo's own hover states
       // already use plain Tailwind transitions for, not GSAP (reserved in
       // this project for scroll/entrance/multi-element orchestration).
-      className={`group relative overflow-hidden rounded-sm ${large ? "aspect-[4/3]" : aspect}`}
+      className={`group relative block overflow-hidden rounded-sm ${large ? "aspect-[4/3]" : aspect}`}
     >
       <Image
         src={service.image.src}
@@ -127,6 +129,6 @@ function ServiceCard({
           {service.label}
         </span>
       </div>
-    </div>
+    </Link>
   );
 }
