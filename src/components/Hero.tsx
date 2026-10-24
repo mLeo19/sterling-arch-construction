@@ -2,19 +2,14 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Fragment, useRef } from "react";
+import { useRef } from "react";
 import { useGSAP } from "@gsap/react";
 import { gsap } from "@/lib/gsap";
 import { site } from "@/lib/data/site";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { useIntroReady } from "@/components/motion/IntroSequence";
-import {
-  ease,
-  heroTextBudget,
-  pageTransitionRiseTime,
-  pageTransitionState,
-  staggerReveal,
-} from "@/lib/motion";
+import { WordReveal } from "@/components/motion/WordReveal";
+import { ease, heroTextBudget, pageTransitionRiseTime, pageTransitionState } from "@/lib/motion";
 
 export default function Hero() {
   const sectionRef = useRef<HTMLElement>(null);
@@ -23,7 +18,6 @@ export default function Hero() {
   const specialtyRef = useRef<HTMLDivElement>(null);
   const topBarRef = useRef<HTMLDivElement>(null);
   const ctaRef = useRef<HTMLAnchorElement>(null);
-  const headlineRef = useRef<HTMLHeadingElement>(null);
   const ready = useIntroReady();
 
   useGSAP(
@@ -72,19 +66,13 @@ export default function Hero() {
   // simply becomes visible as its own page-pane rises over it.
   useGSAP(
     () => {
-      if (!ready || !headlineRef.current) return;
-      const words = headlineRef.current.querySelectorAll("[data-word]");
+      if (!ready) return;
       const prefersReducedMotion = window.matchMedia(
         "(prefers-reduced-motion: reduce)"
       ).matches;
 
       if (prefersReducedMotion) {
         gsap.set([topBarRef.current, ctaRef.current], { opacity: 1 });
-        // y, not yPercent - see the main entrance effect's own doc comment
-        // below on why mixing yPercent with this element's SSR-rendered raw
-        // transform (also translateY, also parsed by GSAP into its `y`
-        // bucket) would add to it instead of clearing it.
-        gsap.set(words, { y: 0 });
         gsap.set(specialtyRef.current, { opacity: 1, y: 0 });
         return;
       }
@@ -129,49 +117,20 @@ export default function Hero() {
         { opacity: 1, duration: topBarDuration, ease: ease.outQuart, delay: topBarDelay }
       );
 
-      // Each word is its own mask reveal, pushed down inside its own
-      // overflow-clip box in the JSX below (translateY(100%), rendered
-      // there directly so it's already the SSR-painted pose - see that
-      // JSX's own doc comment), then slides up into view - the same
-      // technique, duration, and stagger as the intro loader's wordmark
-      // letters (see IntroSequence.tsx and staggerReveal in lib/motion.ts),
-      // just at word granularity instead of letter granularity - scaled
-      // down from those values only if headlineBudget can't fit them at
-      // full size, keeping the same duration:stagger ratio throughout so a
-      // compressed cascade still reads the same way, just faster.
-      //
-      // No gsap.set(words, {yPercent: 100}) here, and the tween below
-      // animates `y`, not `yPercent` - both deliberately. GSAP treats
-      // x/xPercent and y/yPercent as independently tracked and *additive*
-      // (intentional, documented - e.g. xPercent:-50 plus an extra x for a
-      // pixel nudge). The JSX's raw CSS transform is the only thing ever
-      // setting this element's pose before this tween runs, so GSAP caches
-      // it as a `y` (pixel) value the first time it touches the element - a
-      // `yPercent` set on top would add to that instead of overwriting it,
-      // landing at double the intended offset. Animating `y` instead
-      // targets the same bucket GSAP already cached the SSR pose into, so
-      // it cleanly overwrites down to 0.
-      const naturalWordsTotal =
-        staggerReveal.duration + staggerReveal.stagger * (words.length - 1);
-      const wordScale = Math.min(1, headlineBudget / naturalWordsTotal);
-      const wordDuration = staggerReveal.duration * wordScale;
-      const wordStagger = staggerReveal.stagger * wordScale;
-
-      // The specialty block starts at the same moment as the headline (not
-      // after), fading and sliding up together with it. A short 0.1s
-      // stagger after the top bar gives a layered feel.
-      const tl = gsap.timeline({ delay: headlineDelay });
-      tl.to(words, {
-        y: 0,
-        duration: wordDuration,
-        ease: staggerReveal.ease,
-        stagger: wordStagger,
-      }).fromTo(
-          specialtyRef.current,
-          { opacity: 0, y: 24 },
-          { opacity: 1, y: 0, duration: specialtyDuration, ease: ease.outQuart },
-          0
-        );
+      // Starts at the same moment WordReveal's own headline reveal does
+      // (pageRevealDelay + 0.1) - WordReveal computes that identical delay
+      // internally, so this just mirrors it rather than sharing a timeline.
+      gsap.fromTo(
+        specialtyRef.current,
+        { opacity: 0, y: 24 },
+        {
+          opacity: 1,
+          y: 0,
+          duration: specialtyDuration,
+          ease: ease.outQuart,
+          delay: headlineDelay,
+        }
+      );
     },
     { scope: sectionRef, dependencies: [ready] }
   );
@@ -229,40 +188,17 @@ export default function Hero() {
             hero body has no CTA either - its only "Get a Quote" lives in the
             top bar (desktop) and the menu panel, both already wired up. */}
         <div className="flex h-full flex-col items-center justify-end px-6 pb-40 text-center sm:pb-48">
-          <h1
-            ref={headlineRef}
+          {/* Word granularity, not per-line - this tagline has no fixed
+              line breaks, so it reflows at different widths and staggering
+              by line would mean guessing break points that drift out of
+              sync. Not per-letter either (despite the intro loader's
+              wordmark using that, see staggerReveal in lib/motion.ts) - too
+              busy across a full sentence. */}
+          <WordReveal
+            as="h1"
+            text={site.tagline}
             className="max-w-3xl text-3xl leading-tight font-medium text-white sm:text-5xl md:text-6xl"
-          >
-            {/* Per-word mask reveal: each word gets its own overflow-clip
-                box and slides up from behind it. Word granularity, not
-                per-line - this tagline has no fixed line breaks, so it
-                reflows at different widths and staggering by line would
-                mean guessing break points that drift out of sync. Not
-                per-letter either (despite the intro loader's wordmark
-                using that, see staggerReveal in lib/motion.ts) - too busy
-                across a full sentence. The space between words is a plain
-                text node outside any clip box, so line-wrapping at word
-                boundaries is untouched.
-
-                translateY(100%) rendered here directly rather than only
-                via the entrance effect's gsap.set - the server-rendered
-                HTML would otherwise paint fully visible before GSAP ever
-                runs, so every word would flash in at rest before snapping
-                to its hidden pose and sliding back up. */}
-            {site.tagline.split(" ").map((word, i) => (
-              <Fragment key={i}>
-                <span className="inline-block overflow-clip">
-                  <span
-                    data-word
-                    className="inline-block"
-                    style={{ transform: "translateY(100%)" }}
-                  >
-                    {word}
-                  </span>
-                </span>{" "}
-              </Fragment>
-            ))}
-          </h1>
+          />
         </div>
 
         {/* Mobile-only scroll cue, matching fluid.glass (hidden at sm: and
