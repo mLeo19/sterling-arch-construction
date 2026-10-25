@@ -287,12 +287,42 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     const clampedScrollY = Math.min(scrollY, maxScroll);
 
     wrapper.style.transform = `translateY(${-clampedScrollY}px)`;
-    snapshotContainer.replaceChildren(wrapper);
 
-    // Harmless when already loaded, and removes the one theoretical gap (a
-    // still-pending lazy image frozen mid-load at the instant of capture).
-    wrapper.querySelectorAll("img").forEach((img) => {
-      img.loading = "eager";
+    // Every cloned <img> is a brand-new DOM node, even though it points at
+    // the same already-loaded, already-on-screen image resource as its live
+    // counterpart - and a new node is not guaranteed to reuse the browser's
+    // already-decoded raster for that resource. Inserting wrapper before
+    // these have each had a chance to decode leaves a window where the
+    // snapshot is in the DOM, stacked above the live page (explicit z-index
+    // always wins over the live page's z-index:auto, regardless of DOM
+    // order), but its image areas haven't painted yet - on iOS specifically,
+    // that reads as a brief flash of whatever's directly behind the missing
+    // image (a gradient-overlay div with no image under it yet paints solid,
+    // which is why a dark hero photo's text-legibility overlay flashes as a
+    // near-black frame; a plain content image with nothing behind it flashes
+    // as blank/white). decode() on each already-loaded clone resolves
+    // against bytes already in cache, so in practice this costs at most a
+    // couple of milliseconds - imperceptible - while guaranteeing the
+    // snapshot never becomes visible half-painted.
+    //
+    // Only images that were already loaded on the live page (img.complete)
+    // are waited on - an image that hadn't loaded yet (e.g. a native-lazy
+    // image below the fold) wasn't visually on screen to flash in the first
+    // place, so there's nothing to protect by blocking on it, and doing so
+    // anyway risks a real delay if it hasn't even started fetching.
+    // Promise.race against a short timeout is a safety net against any
+    // single decode() hanging longer than that - better to reveal with one
+    // image still catching up than to delay the whole snapshot indefinitely.
+    const loadedImgs = Array.from(wrapper.querySelectorAll("img")).filter(
+      (img) => img.complete,
+    );
+    const decodePromises = loadedImgs.map((img) =>
+      img.decode ? img.decode().catch(() => {}) : Promise.resolve(),
+    );
+    const timeout = new Promise<void>((resolve) => setTimeout(resolve, 80));
+
+    Promise.race([Promise.allSettled(decodePromises), timeout]).then(() => {
+      snapshotContainer.replaceChildren(wrapper);
     });
   }, [lenisRef]);
 
