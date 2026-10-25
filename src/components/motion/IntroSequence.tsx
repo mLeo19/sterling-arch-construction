@@ -157,9 +157,10 @@ function IntroLoader({ onReady }: { onReady: () => void }) {
       // wipe every other page-to-page navigation uses (see
       // PageTransitionColumns.tsx) - a plain JS call, not another GSAP
       // timeline step, since it has to await cover()'s own promise before
-      // doing anything else. Columns are the same cream as this overlay's
-      // own background, so them covering over it is visually seamless
-      // (nothing changes color at any point); only once fully covered does
+      // doing anything else. The columns' own black reads clearly against
+      // this overlay's cream background as they spring up, which is the
+      // whole point (an earlier cream-on-cream version made that motion
+      // invisible here specifically). Only once fully covered does
       // onReady() fire (letting the real page finish settling in, hidden
       // behind the columns) and this overlay get cleared, then the columns
       // retract exactly as they would after any other navigation.

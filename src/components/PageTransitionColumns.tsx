@@ -69,7 +69,15 @@ export function PageTransitionColumns() {
     pageColumnsApi.cover = () =>
       new Promise<void>((resolve) => {
         const tl = gsap.timeline({ onComplete: resolve });
-        tl.fromTo(
+        // yPercent reset first, instant - reveal() leaves columns
+        // translated off the top of the screen (yPercent: -100) once it
+        // finishes, and cover() previously only ever animated scaleY,
+        // never touching yPercent back to 0. Every cover() after the
+        // first was therefore growing columns to full scale while they
+        // sat permanently off-screen above the viewport - "fully
+        // covering" by scale alone, invisible in practice, which is why
+        // this only ever appeared to work once.
+        tl.set(columns, { yPercent: 0 }).fromTo(
           columns,
           { scaleY: 0 },
           {
@@ -106,7 +114,7 @@ export function PageTransitionColumns() {
           ref={(el) => {
             if (el) columnsRef.current[i] = el;
           }}
-          className="h-full flex-1 origin-bottom scale-y-0 bg-background"
+          className="h-full flex-1 origin-bottom scale-y-0 bg-black"
         />
       ))}
     </div>
