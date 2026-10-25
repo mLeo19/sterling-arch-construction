@@ -556,7 +556,20 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       // (triggers need accurate positions against the final, settled
       // layout) - this one is purely about keeping the scroll cache
       // harmless in the meantime.
-      ScrollTrigger.refresh();
+      //
+      // Only needed when Lenis actually exists: SmoothScroll.tsx never
+      // constructs Lenis on a touch device (pointer: coarse - native scroll
+      // feels better there), so lenisRef.current is null on every phone, the
+      // lenis.on("scroll", ...) wiring this guards against was never
+      // attached, and the stale-restore race this refresh() prevents can't
+      // happen at all. ScrollTrigger.refresh() is a genuinely expensive,
+      // whole-page remeasure (every mounted trigger - a content-heavy page
+      // here easily has a dozen from Parallax/RevealOnScroll/PinnedScale);
+      // paying that cost on mobile guarded nothing, on exactly the device
+      // class with the least frame budget to spare for it.
+      if (lenisRef?.current) {
+        ScrollTrigger.refresh();
+      }
       resetScroll();
       // Unconditionally holds scroll at 0 for a fixed window of animation
       // frames, every frame, no exceptions - not a reactive 'scroll'
@@ -605,7 +618,18 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       };
       const holdTick = () => {
         if (window.scrollY !== 0) resetScroll();
-        document.body.style.overflow = "hidden";
+        // Guarded, not an unconditional reassert every frame: the race this
+        // protects against (SiteNav's menu-close clearing this same
+        // property) is rare, and writing an inline style the browser has to
+        // diff against its current computed value still costs a style
+        // recalc even when the value doesn't change - over 120 frames
+        // that's 120 recalcs to catch a race that fires at most once.
+        // Reading the inline value first (cheap CSSOM string read, not a
+        // layout read) and only writing on an actual mismatch keeps the same
+        // one-frame-late tolerance the comment above already accepts.
+        if (document.body.style.overflow !== "hidden") {
+          document.body.style.overflow = "hidden";
+        }
         framesLeft -= 1;
         if (framesLeft <= 0) {
           stopHold();
