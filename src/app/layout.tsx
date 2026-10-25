@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import SmoothScroll from "@/components/SmoothScroll";
 import { IntroSequence } from "@/components/motion/IntroSequence";
@@ -37,6 +37,18 @@ export const metadata: Metadata = {
     description: site.tagline,
     images: ["/images/photo-1758846946188-12316e71c680.jpg"],
   },
+};
+
+// Without this, iOS Safari dynamically tints its own status bar/toolbar to
+// whatever color it samples at the edges of the page - with nothing pinned
+// here, that chrome retints itself mid-transition (independently, on its
+// own timing, not synced to this site's own animation) every time a dark
+// section like the footer or a photo overlay passes near the top/bottom of
+// the viewport. Pinning this to the site's actual resting background stops
+// Safari's own UI from flickering on top of whatever the page itself is
+// doing.
+export const viewport: Viewport = {
+  themeColor: "#f3f0ec",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
