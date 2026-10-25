@@ -791,10 +791,7 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       <div
         ref={snapshotRef}
         aria-hidden
-        // TEMP DEBUG - bg-cyan-400: diagnosing a reported black flash on
-        // navigation. If cyan ever flashes, this empty container is
-        // visible before the clone lands in it. Revert once diagnosed.
-        className="fixed inset-0 z-[2] overflow-hidden pointer-events-none will-change-transform bg-cyan-400"
+        className="fixed inset-0 z-[2] overflow-hidden pointer-events-none will-change-transform"
       />
       {/* z-[5]: below the content pane's own transient z-index (10, or 101
           on the initial load) but above the plain page background it's
