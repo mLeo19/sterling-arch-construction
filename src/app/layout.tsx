@@ -5,6 +5,7 @@ import { IntroSequence } from "@/components/motion/IntroSequence";
 import { PageTransition } from "@/components/PageTransition";
 import { SiteNav } from "@/components/SiteNav";
 import { Footer } from "@/components/Footer";
+import { site } from "@/lib/data/site";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -18,9 +19,24 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sterling Arch Construction",
-  description:
-    "Sterling Arch Construction - precision-built structures, shaped by craft and engineered to last.",
+  metadataBase: new URL(site.url),
+  title: site.name,
+  description: site.tagline,
+  openGraph: {
+    title: site.name,
+    description: site.tagline,
+    url: site.url,
+    siteName: site.name,
+    images: [{ url: "/images/photo-1758846946188-12316e71c680.jpg" }],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: site.name,
+    description: site.tagline,
+    images: ["/images/photo-1758846946188-12316e71c680.jpg"],
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

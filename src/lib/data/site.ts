@@ -1,6 +1,7 @@
 export const site = {
   name: "Sterling Arch Construction",
   shortName: "Sterling Arch",
+  url: "https://sterlingarch.build",
   tagline: "Precision-built structures, shaped by craft and engineered to last.",
   phone: "860 555 0192",
   email: "studio@sterlingarch.build",
