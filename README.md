@@ -14,10 +14,11 @@ engineering rather than a typical CRUD/content site.
 
 ## Notable technical details
 
-- **Custom page transition system** - full-page pane transitions that stay
-  in sync with pinned ScrollTrigger sections, including correctly reverting
-  and reapplying scroll-linked animations across the transition boundary
-  without visible jumps.
+- **Custom page transition system** - a solid vertical-columns wipe that
+  covers the screen before swapping routes underneath, deliberately never
+  touching, measuring, or cloning the live page content. That constraint
+  is what keeps it immune to the cross-browser flashing/repaint bugs a
+  more elaborate clone-and-crossfade transition would otherwise chase.
 - **Scroll-driven hero and pinned sections** - parallax drift, pinned-scale
   cinematic moments, and a horizontal scroll-jacked process section, all
   built on GSAP ScrollTrigger rather than CSS scroll-timeline.
