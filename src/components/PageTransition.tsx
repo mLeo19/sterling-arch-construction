@@ -707,19 +707,68 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       const DARKEN_DURATION = 0.5;
       gsap.set(darkenRef.current, { opacity: 0 });
 
-      const tl = gsap.timeline({ onComplete: release });
-      tlRef.current = tl;
-      tl.to(el, { y: 0, duration: yDuration, ease: ease.inOutQuart }, 0)
-        .to(
-          el,
-          { scale: 1, duration: scaleDuration, ease: ease.inOutQuart },
-          scaleOffset,
-        )
-        .to(
-          darkenRef.current,
-          { opacity: DARKEN_OPACITY, duration: DARKEN_DURATION, ease: "power2.out" },
-          0,
-        );
+      // el itself is fully offscreen right now (y: window.innerHeight, set
+      // above) - nothing it contains is visible yet, so briefly delaying the
+      // start of the rise costs nothing visually. Spent here decoding el's
+      // own priority images (the new page's own hero photo, typically the
+      // very first thing that becomes visible as el's top edge rises into
+      // view) before that rise starts: these are brand-new DOM nodes (el
+      // just (re)mounted - contentRef is keyed on pathname), not guaranteed
+      // to reuse any previously-decoded raster for the same resource even
+      // though Next's own `priority` preload already got the bytes on the
+      // wire early. Skipping the decode wait would let the rise start while
+      // that photo is still blank, exposing whatever's stacked behind it
+      // (usually a solid gradient overlay with no image to wait on) for a
+      // frame or two - on iOS, a dark overlay over a not-yet-painted hero
+      // photo reads as a flash of near-black rising into view, then the
+      // actual photo catching up a beat later. Only images that were ever
+      // going to paint immediately (not loading="lazy") are waited on; a
+      // couple of ms in practice since priority already got the bytes here
+      // early, raced against a timeout so one slow decode can't hold up the
+      // whole transition.
+      const priorityImgs = Array.from(
+        el.querySelectorAll<HTMLImageElement>("img"),
+      ).filter((img) => img.loading !== "lazy");
+      const decodePromises = priorityImgs.map((img) =>
+        img.decode ? img.decode().catch(() => {}) : Promise.resolve(),
+      );
+      const decodeTimeout = new Promise<void>((resolve) =>
+        setTimeout(resolve, 80),
+      );
+
+      // Not GSAP-tracked, so revertOnUpdate below won't cancel this on its
+      // own if a second navigation interrupts before it resolves - this
+      // flag, set in the cleanup this effect returns, is what stops a stale
+      // decode-wait from starting a timeline for a page that's no longer
+      // current.
+      let cancelled = false;
+
+      Promise.race([Promise.allSettled(decodePromises), decodeTimeout]).then(
+        () => {
+          if (cancelled) return;
+          const tl = gsap.timeline({ onComplete: release });
+          tlRef.current = tl;
+          tl.to(el, { y: 0, duration: yDuration, ease: ease.inOutQuart }, 0)
+            .to(
+              el,
+              { scale: 1, duration: scaleDuration, ease: ease.inOutQuart },
+              scaleOffset,
+            )
+            .to(
+              darkenRef.current,
+              {
+                opacity: DARKEN_OPACITY,
+                duration: DARKEN_DURATION,
+                ease: "power2.out",
+              },
+              0,
+            );
+        },
+      );
+
+      return () => {
+        cancelled = true;
+      };
     },
     { dependencies: [pathname, ready], revertOnUpdate: true },
   );
