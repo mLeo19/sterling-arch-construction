@@ -43,6 +43,22 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   const lenisRef = useLenis();
   const ready = useIntroReady();
   const transitioningRef = useRef(false);
+  // The click listener below is attached exactly once, for this
+  // component's entire lifetime (it never unmounts - see the top-level
+  // doc comment) - reading router through a ref it stays current with,
+  // rather than closing over `router` directly, eliminates any
+  // possibility of the listener effect re-running (cleanup, then a
+  // brief window with nothing attached, then re-add) if useRouter() ever
+  // returns a new object identity across a navigation, which some router
+  // implementations do since their context value carries current-route
+  // state. A later click landing in that gap would fall through to
+  // Link's own default handling - no columns, no interception at all -
+  // which matches exactly what navigating without the transition firing
+  // looks like.
+  const routerRef = useRef(router);
+  useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
   // Holds the callback that tells the in-flight navigate() call "the DOM
   // now matches the new route" - router.push() itself doesn't signal this
   // (App Router navigation is async), so the pending promise waits here
@@ -109,7 +125,7 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
         "(prefers-reduced-motion: reduce)",
       ).matches;
       if (prefersReducedMotion) {
-        router.push(href);
+        routerRef.current.push(href);
         return;
       }
 
@@ -125,7 +141,7 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
         const routeCommitted = new Promise<void>((resolve) => {
           resolveRef.current = resolve;
         });
-        router.push(href);
+        routerRef.current.push(href);
         routeCommitted
           .then(() => pageColumnsApi.reveal())
           .finally(() => {
@@ -136,10 +152,12 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
 
     // Capture phase so this always runs before Link's own click handling
     // and can preventDefault it, regardless of where in the tree that
-    // handler is attached.
+    // handler is attached. Empty deps - attached exactly once; see
+    // routerRef's own doc comment above for why this doesn't close over
+    // `router` directly.
     document.addEventListener("click", handleClick, true);
     return () => document.removeEventListener("click", handleClick, true);
-  }, [router]);
+  }, []);
 
   return <>{children}</>;
 }
