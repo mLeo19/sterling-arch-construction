@@ -83,22 +83,9 @@ export function RevealOnScroll({
           scrollTrigger: {
             trigger: ref.current,
             start: "top 85%",
-            // Play once, never reverse - not just a UX call (an already-
-            // revealed section shouldn't hide itself again just because the
-            // user scrolled back up past it), but a correctness one: this
-            // whole tree lives inside PageTransition's contentRef, which
-            // calls ScrollTrigger.refresh() of its own accord mid-entrance
-            // (both when it pins itself to position:fixed and again in
-            // release(), see that file's own doc comments). Each refresh
-            // recalculates this trigger's start/end against whatever
-            // (possibly pinned/scaled) layout its ancestor has *right now*,
-            // which can land this element on the wrong side of "start" for
-            // a moment even though nothing the user did changed - with
-            // "reverse" here, that moment is enough to hide an already-
-            // played reveal and then replay it once the layout settles.
-            // onLeaveBack set to "none" means there's nothing left to
-            // reverse regardless of which side of "start" it transiently
-            // lands on.
+            // Play once, never reverse - an already-revealed section
+            // shouldn't hide itself again just because the user scrolled
+            // back up past it.
             toggleActions: "play none none none",
           },
         }
