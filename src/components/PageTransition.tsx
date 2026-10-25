@@ -698,20 +698,33 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     <>
       {/* z-[2]: a frozen visual stand-in for the outgoing route, above the
           plain page background, below the darken overlay and the incoming
-          pane. Empty outside a transition. */}
+          pane. Empty outside a transition.
+          will-change: transform - captureSnapshot() fills this with a large
+          cloned subtree synchronously, on tap, in a single tick (see its own
+          doc comment). Without a compositor layer already promoted before
+          that insertion happens, Safari discovers mid-mutation that this
+          fixed, soon-to-be-transformed container needs one, and the frame
+          where it establishes that layer can paint through to whatever's
+          currently underneath - seen on iOS as a brief flash of the
+          current section's own color at the instant of tap. Pre-promoting
+          this (permanently, even while empty) means that layer already
+          exists by the time the clone lands in it. */}
       <div
         ref={snapshotRef}
         aria-hidden
-        className="fixed inset-0 z-[2] overflow-hidden pointer-events-none"
+        className="fixed inset-0 z-[2] overflow-hidden pointer-events-none will-change-transform"
       />
       {/* z-[5]: below the content pane's own transient z-index (10, or 101
           on the initial load) but above the plain page background it's
           meant to darken. Not keyed on pathname, so it persists as one
-          stable element across navigations instead of remounting. */}
+          stable element across navigations instead of remounting.
+          will-change: transform for the same reason as snapshotRef above -
+          this opacity-tweens in on the same tick snapshotRef's clone lands,
+          so it's exposed to the same layer-promotion-timing risk. */}
       <div
         ref={darkenRef}
         aria-hidden
-        className="fixed inset-0 z-[5] bg-black opacity-0 pointer-events-none"
+        className="fixed inset-0 z-[5] bg-black opacity-0 pointer-events-none will-change-transform"
       />
       {/* bg-background: without it, this div (and a bare <main>/<PageHero>)
           has no background of its own - the only paint color comes from
