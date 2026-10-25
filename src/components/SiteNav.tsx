@@ -546,7 +546,31 @@ export function SiteNav() {
               }}
               aria-expanded={open}
               aria-label={open ? "Close menu" : "Open menu"}
-              className="flex h-[13.333vw] w-[13.333vw] shrink-0 items-center justify-center text-white transition-opacity duration-300 hover:opacity-70 sm:h-[3.125vw] sm:w-[3.125vw]"
+              // This button is returnFocusRef, refocused programmatically
+              // (not via a real Tab press) the moment the menu closes (see
+              // the returnFocusRef effect in MenuOverlay.tsx). Some engines
+              // (Safari in particular) don't apply the same :focus-visible
+              // heuristic Chromium does for script-triggered focus and fall
+              // back to their native ring regardless - a stray blue halo
+              // with no real click or Tab behind it.
+              //
+              // [outline-style:none] as the baseline, not the outline-none/
+              // outline-hidden utilities - both of those set the shared
+              // --tw-outline-style custom property (Tailwind v4 threads
+              // every outline-* utility's style through it) to "none"
+              // unconditionally, and since focus-visible:outline-2 below
+              // only ever *reads* that variable rather than redefining it,
+              // the override would win regardless of :focus-visible state -
+              // confirmed by inspecting the actual generated CSS, which
+              // still showed outline-style: none even while :focus-visible
+              // matched and outline-width/color had correctly updated. A
+              // literal arbitrary property here never touches that
+              // variable, so focus-visible:outline-2's own higher-
+              // specificity `outline-style: var(--tw-outline-style)`
+              // (unset, so it falls back to the property's registered
+              // "solid" initial value) correctly wins only when focus-
+              // visible actually matches.
+              className="flex h-[13.333vw] w-[13.333vw] shrink-0 items-center justify-center text-white [outline-style:none] transition-opacity duration-300 hover:opacity-70 focus-visible:opacity-70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white/70 sm:h-[3.125vw] sm:w-[3.125vw]"
             >
               <span
                 ref={burgerLinesRef}
