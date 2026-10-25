@@ -288,41 +288,32 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
 
     wrapper.style.transform = `translateY(${-clampedScrollY}px)`;
 
-    // Every cloned <img> is a brand-new DOM node, even though it points at
-    // the same already-loaded, already-on-screen image resource as its live
-    // counterpart - and a new node is not guaranteed to reuse the browser's
-    // already-decoded raster for that resource. Inserting wrapper before
-    // these have each had a chance to decode leaves a window where the
-    // snapshot is in the DOM, stacked above the live page (explicit z-index
-    // always wins over the live page's z-index:auto, regardless of DOM
-    // order), but its image areas haven't painted yet - on iOS specifically,
-    // that reads as a brief flash of whatever's directly behind the missing
-    // image (a gradient-overlay div with no image under it yet paints solid,
-    // which is why a dark hero photo's text-legibility overlay flashes as a
-    // near-black frame; a plain content image with nothing behind it flashes
-    // as blank/white). decode() on each already-loaded clone resolves
-    // against bytes already in cache, so in practice this costs at most a
-    // couple of milliseconds - imperceptible - while guaranteeing the
-    // snapshot never becomes visible half-painted.
-    //
-    // Only images that were already loaded on the live page (img.complete)
-    // are waited on - an image that hadn't loaded yet (e.g. a native-lazy
-    // image below the fold) wasn't visually on screen to flash in the first
-    // place, so there's nothing to protect by blocking on it, and doing so
-    // anyway risks a real delay if it hasn't even started fetching.
-    // Promise.race against a short timeout is a safety net against any
-    // single decode() hanging longer than that - better to reveal with one
-    // image still catching up than to delay the whole snapshot indefinitely.
-    const loadedImgs = Array.from(wrapper.querySelectorAll("img")).filter(
-      (img) => img.complete,
-    );
-    const decodePromises = loadedImgs.map((img) =>
-      img.decode ? img.decode().catch(() => {}) : Promise.resolve(),
-    );
-    const timeout = new Promise<void>((resolve) => setTimeout(resolve, 80));
+    // Inserted synchronously, immediately - a prior version of this code
+    // waited on each cloned <img>'s decode() first (racing an 80ms timeout)
+    // to avoid a flash of whatever's behind an undecoded image. That traded
+    // one flash for a worse one: snapshotRef sits above the live page's own
+    // document flow (explicit z-index always wins over the live page's
+    // z-index:auto, regardless of DOM order), and the main entrance effect
+    // pulls el out of flow into position:fixed independently and
+    // immediately, with only a bare, backgroundless spacer taking its
+    // place in the meantime. Any window where snapshotRef is still
+    // completely empty - which the decode wait directly created, up to
+    // 80ms of it - left that spacer's blank gap exposed at the screen
+    // edges with nothing covering it at all, confirmed via a frame-by-frame
+    // reading of a real screen recording (not guessed): a light flash where
+    // the gap showed through, then black once the darken overlay caught up.
+    // That is a strictly worse failure mode than an individual cloned image
+    // needing a few more frames to paint - the clone's own non-image
+    // background colors (every section's actual CSS background) are
+    // already correct the instant it's in the DOM, synchronous or not;
+    // only image pixels specifically need any catch-up time, and only
+    // within their own bounds.
+    snapshotContainer.replaceChildren(wrapper);
 
-    Promise.race([Promise.allSettled(decodePromises), timeout]).then(() => {
-      snapshotContainer.replaceChildren(wrapper);
+    // Harmless when already loaded, and removes the one theoretical gap (a
+    // still-pending lazy image frozen mid-load at the instant of capture).
+    wrapper.querySelectorAll("img").forEach((img) => {
+      img.loading = "eager";
     });
   }, [lenisRef]);
 
