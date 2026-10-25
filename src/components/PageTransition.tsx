@@ -3,38 +3,39 @@
 import { useEffect, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useIntroReady } from "@/components/motion/IntroSequence";
+import { pageColumnsApi } from "@/components/PageTransitionColumns";
 import { useLenis } from "@/components/SmoothScroll";
 import { pageTransitionState } from "@/lib/motion";
 
 /**
- * Matches fluid.glass's own page-to-page transition exactly, confirmed by
- * reading their actual shipped Nuxt/Vue bundle rather than guessing from
- * how the live site looks: a `RouterLink` click calls `router.push()`
- * (Next's equivalent) wrapped in the browser's native
- * `document.startViewTransition()` when it exists, with zero custom
- * animation - the browser's own default cross-fade is the entire effect.
- * Their only transition-specific CSS is one rule dropping the outgoing
- * page's z-index/pointer-events during the fade, which Next doesn't need
- * (the old route's DOM is already gone by the time the browser's "before"
- * snapshot would be visible under it - App Router doesn't keep it mounted
- * the way Vue Router's own transition component does).
+ * A link click covers the screen with PageTransitionColumns' own vertical-
+ * columns wipe, swaps the route underneath while fully hidden, then
+ * reveals it. Deliberately not the browser's native View Transitions API
+ * (an earlier version of this file used that, and used fluid.glass's own
+ * actual implementation as its reference) - once the columns are
+ * guaranteed to fully obscure the screen during the swap, there's nothing
+ * left for a native snapshot/crossfade to buy: the columns are pure CSS/
+ * GSAP transforms with zero platform API dependency, so every browser
+ * (Firefox and Android Chrome included, not just Safari 18+/Chromium)
+ * gets the identical animation rather than Firefox silently falling back
+ * to an unanimated instant swap.
  *
- * This replaces an earlier, much more elaborate hand-rolled version (DOM-
- * cloned outgoing-page snapshots, a rise/scale/darken incoming pane kept
- * in position:fixed, per-frame scroll freezing) that was never actually
- * part of fluid.glass's own design - an embellishment layered on top of
- * the reference by an earlier pass, and the direct source of every iOS
- * Safari-specific flash/repaint bug found this session (forced-layout
- * timing, compositor layer promotion, explicit-vs-auto z-index stacking).
- * View Transitions sidesteps all of that by letting each browser's own
- * engine own the snapshot/composite work instead of re-implementing it by
- * hand - and on a browser that doesn't support it at all (Firefox, as of
- * this writing), `startViewTransition` is simply never called, same as
- * fluid.glass: a plain, instant, trivially-correct navigation.
+ * This also replaced a much more elaborate hand-rolled transition (DOM-
+ * cloned outgoing-page snapshots, a rise/scale/darken incoming pane held
+ * in position:fixed, per-frame scroll freezing, manual z-index stacking
+ * against the live page) that was the direct source of every iOS Safari-
+ * specific flash/repaint bug chased across this project's history -
+ * forced-layout timing races, compositor layer promotion timing,
+ * explicit-vs-auto z-index stacking gaps, image decode races. This
+ * version never touches, measures, or clones the actual page content at
+ * all - the columns are a solid, opaque, purely decorative overlay
+ * sitting above everything while the real page quietly swaps behind it,
+ * which structurally can't exhibit that entire bug class.
  *
- * The one-time intro loader (IntroSequence.tsx/IntroLoader) is unrelated
- * to this and untouched - this only governs subsequent page-to-page
- * navigation, after that loader has already lifted off.
+ * The one-time intro loader (IntroSequence.tsx) builds its own matching
+ * set of columns for its own liftoff handoff, sharing this file's timing
+ * constants - see its own doc comment for why that's a separate DOM
+ * instance rather than this same one.
  */
 export function PageTransition({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -42,11 +43,11 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   const lenisRef = useLenis();
   const ready = useIntroReady();
   const transitioningRef = useRef(false);
-  // Holds the callback that tells startViewTransition "the DOM now matches
-  // the new route" - router.push() itself doesn't signal this (App Router
-  // navigation is async), so the pending transition waits here until the
-  // pathname effect below confirms React has actually committed the new
-  // page.
+  // Holds the callback that tells the in-flight navigate() call "the DOM
+  // now matches the new route" - router.push() itself doesn't signal this
+  // (App Router navigation is async), so the pending promise waits here
+  // until the pathname effect below confirms React has actually committed
+  // the new page.
   const resolveRef = useRef<(() => void) | null>(null);
 
   // A plain (passive) effect, deliberately not useGSAP/useLayoutEffect:
@@ -61,14 +62,14 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     if (ready) pageTransitionState.hasPlayedInitial = true;
   }, [ready]);
 
-  // Resolves whatever view transition is in flight once the new route has
+  // Resolves whatever navigation is in flight once the new route has
   // actually committed, and resets scroll to the top of it - matching Vue
   // Router's own default scrollBehavior (fluid.glass's actual mechanism
-  // for this, not a custom one).
+  // for this). Runs while the columns are still fully covering the
+  // screen, so the jump is never visible.
   useEffect(() => {
     resolveRef.current?.();
     resolveRef.current = null;
-    transitioningRef.current = false;
 
     const lenis = lenisRef?.current;
     if (lenis) {
@@ -97,34 +98,37 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       }
       if (url.origin !== window.location.origin) return;
       if (url.pathname === window.location.pathname) return;
-      if (transitioningRef.current) {
-        event.preventDefault();
-        return;
-      }
 
       event.preventDefault();
+
+      if (transitioningRef.current) return;
+
       const href = url.pathname + url.search + url.hash;
 
       const prefersReducedMotion = window.matchMedia(
         "(prefers-reduced-motion: reduce)",
       ).matches;
-
-      if (
-        prefersReducedMotion ||
-        typeof document === "undefined" ||
-        !("startViewTransition" in document)
-      ) {
+      if (prefersReducedMotion) {
         router.push(href);
         return;
       }
 
       transitioningRef.current = true;
-      document.startViewTransition(() => {
-        return new Promise<void>((resolve) => {
-          resolveRef.current = resolve;
-          router.push(href);
-        });
+
+      const routeCommitted = new Promise<void>((resolve) => {
+        resolveRef.current = resolve;
       });
+      router.push(href);
+
+      // Covering and waiting for the new route to commit run concurrently,
+      // not sequentially - the columns' own cover animation sets the
+      // transition's minimum duration, with actual route-load time (if
+      // slower) simply extending the hold rather than adding on top of it.
+      Promise.all([pageColumnsApi.cover(), routeCommitted])
+        .then(() => pageColumnsApi.reveal())
+        .finally(() => {
+          transitioningRef.current = false;
+        });
     }
 
     // Capture phase so this always runs before Link's own click handling

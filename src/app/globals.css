@@ -86,35 +86,3 @@ body {
 html.lenis.lenis-stopped:not(.lenis-autoToggle) {
   overflow: visible;
 }
-
-/* Custom motion for the native View Transition PageTransition.tsx starts on
-   every link click (document.startViewTransition()) - the browser's own
-   default is a bare opacity crossfade, which read as "no transition at
-   all." These two pseudo-elements are the browser's own before/after
-   snapshots of the whole page; styling them is the entire transition, no
-   JS/DOM manipulation involved (see PageTransition.tsx's own doc comment
-   for why that distinction matters). Only ever exist while a transition
-   the JS actually started is running, and only in browsers that support
-   the API at all - inert everywhere else (Firefox, as of this writing),
-   same as fluid.glass's own fallback. */
-::view-transition-old(root) {
-  animation: page-transition-out 0.4s var(--ease-in-out-cubic) both;
-}
-::view-transition-new(root) {
-  animation: page-transition-in 0.5s var(--ease-out-quart) both;
-}
-@keyframes page-transition-out {
-  to {
-    opacity: 0;
-  }
-}
-@keyframes page-transition-in {
-  from {
-    opacity: 0;
-    transform: translateY(24px) scale(0.98);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) scale(1);
-  }
-}

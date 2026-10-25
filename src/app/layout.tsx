@@ -3,6 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import SmoothScroll from "@/components/SmoothScroll";
 import { IntroSequence } from "@/components/motion/IntroSequence";
 import { PageTransition } from "@/components/PageTransition";
+import { PageTransitionColumns } from "@/components/PageTransitionColumns";
 import { SiteNav } from "@/components/SiteNav";
 import { Footer } from "@/components/Footer";
 import { site } from "@/lib/data/site";
@@ -65,6 +66,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
             <SiteNav />
           </IntroSequence>
         </SmoothScroll>
+        <PageTransitionColumns />
       </body>
     </html>
   );
