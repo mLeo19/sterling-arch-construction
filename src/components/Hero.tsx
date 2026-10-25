@@ -93,8 +93,16 @@ export default function Hero() {
       // the pane's own rise is faster on a subsequent navigation (~0.65s)
       // than the initial load (~0.9s, slower there because it's also racing
       // the intro loader's liftoff).
+      // Only the true initial load (still gated behind the intro loader's
+      // own liftoff/fade timing) waits on this delay - a subsequent
+      // navigation back to "/" has no pane to wait for anymore (see
+      // PageTransition.tsx), so it reveals immediately instead of sitting
+      // blank for an extra beat after the browser's own page crossfade has
+      // already settled.
       const isInitialLoad = !pageTransitionState.hasPlayedInitial;
-      const pageRevealDelay = pageTransitionRiseTime(isInitialLoad);
+      const pageRevealDelay = isInitialLoad
+        ? pageTransitionRiseTime(true)
+        : 0;
       const topBarDelay = pageRevealDelay;
       const headlineDelay = pageRevealDelay + 0.1;
 

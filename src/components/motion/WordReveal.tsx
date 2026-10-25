@@ -43,8 +43,12 @@ export function WordReveal({
         return;
       }
 
+      // Same reasoning as Hero.tsx's own topBarDelay/pageRevealDelay: only
+      // the true initial load waits on the old pane's rise time - a
+      // subsequent navigation has no pane to wait for anymore.
       const isInitialLoad = !pageTransitionState.hasPlayedInitial;
-      const wordsDelay = pageTransitionRiseTime(isInitialLoad) + 0.1;
+      const wordsDelay =
+        (isInitialLoad ? pageTransitionRiseTime(true) : 0) + 0.1;
       const wordsBudget = heroTextBudget(wordsDelay);
 
       // Same duration:stagger ratio as staggerReveal always, only scaled
