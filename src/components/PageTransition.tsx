@@ -791,7 +791,10 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       <div
         ref={snapshotRef}
         aria-hidden
-        className="fixed inset-0 z-[2] overflow-hidden pointer-events-none will-change-transform"
+        // TEMP DEBUG - bg-cyan-400: diagnosing a reported black flash on
+        // navigation. If cyan ever flashes, this empty container is
+        // visible before the clone lands in it. Revert once diagnosed.
+        className="fixed inset-0 z-[2] overflow-hidden pointer-events-none will-change-transform bg-cyan-400"
       />
       {/* z-[5]: below the content pane's own transient z-index (10, or 101
           on the initial load) but above the plain page background it's
@@ -803,7 +806,11 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       <div
         ref={darkenRef}
         aria-hidden
-        className="fixed inset-0 z-[5] bg-black opacity-0 pointer-events-none will-change-transform"
+        // TEMP DEBUG - bg-fuchsia-500 instead of bg-black: diagnosing a
+        // reported black flash on navigation. This is capped at 0.5 opacity
+        // in code, so if fuchsia flashes solid/strong, this overlay is
+        // overshooting its intended opacity. Revert once diagnosed.
+        className="fixed inset-0 z-[5] bg-fuchsia-500 opacity-0 pointer-events-none will-change-transform"
       />
       {/* bg-background: without it, this div (and a bare <main>/<PageHero>)
           has no background of its own - the only paint color comes from
@@ -820,7 +827,11 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
           space the ordinary way), set to one viewport's height only for the
           transition's duration. */}
       <div ref={spacerRef} aria-hidden style={{ height: 0 }} />
-      <div ref={contentRef} key={pathname} className="relative bg-background">
+      {/* TEMP DEBUG - bg-yellow-400 instead of bg-background: diagnosing a
+          reported black flash on navigation. If yellow flashes, the
+          incoming pane's own background is visible before its content
+          paints. Revert once diagnosed. */}
+      <div ref={contentRef} key={pathname} className="relative bg-yellow-400">
         {children}
       </div>
     </>

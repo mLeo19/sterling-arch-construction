@@ -159,7 +159,11 @@ export function Footer() {
   return (
     <footer
       ref={footerRef}
-      className="relative flex min-h-[100svh] flex-col overflow-hidden bg-black text-white"
+      // TEMP DEBUG - bg-orange-500 instead of bg-black: diagnosing a
+      // reported black flash on navigation near the footer. If orange
+      // flashes, this is the persistent real footer's own base showing
+      // through before its image paints. Revert once diagnosed.
+      className="relative flex min-h-[100svh] flex-col overflow-hidden bg-orange-500 text-white"
     >
       <div
         ref={parallaxRef}
@@ -186,7 +190,12 @@ export function Footer() {
           />
         </div>
       </div>
-      <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-black/60 to-black" />
+      {/* TEMP DEBUG - green gradient instead of black: diagnosing a
+          reported black flash near the footer. This paints instantly
+          regardless of whether the photo underneath has loaded - if green
+          flashes, this gradient (not the base bg or the photo itself) is
+          what's visible. Revert once diagnosed. */}
+      <div className="absolute inset-0 bg-gradient-to-b from-green-500/70 via-green-500/60 to-green-500" />
 
       <p
         aria-hidden
