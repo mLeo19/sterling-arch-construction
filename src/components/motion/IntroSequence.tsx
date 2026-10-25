@@ -159,13 +159,25 @@ function IntroLoader({ onReady }: { onReady: () => void }) {
         { y: -70, opacity: 0, duration: 1.0, ease: "power2.in" },
         "liftoff",
       )
-      // The overlay doesn't fade to transparent during liftoff, it changes
-      // color while staying fully opaque - PageTransition's incoming pane is
-      // what actually reveals the page underneath, rising up over this.
+      // The color shift still happens first, same as always - this briefly
+      // reads as the loader settling into black before the page shows
+      // through, rather than cutting straight from cream to the real page.
+      // What changed: this used to stay fully opaque for the entire 1.8s
+      // (PageTransition's own incoming pane handled revealing the real page
+      // underneath, rising up to cover this well before the color shift
+      // would ever be visible on its own). With no more pane, the final
+      // step now has to do that reveal itself - a proper opacity fade
+      // instead of the hard display:none cut that used to be invisible
+      // only because something else was already covering it.
       .to(
         overlayRef.current,
-        { backgroundColor: "#000000", duration: 1.6, ease: ease.outQuart },
+        { backgroundColor: "#000000", duration: 1.0, ease: ease.outQuart },
         "liftoff",
+      )
+      .to(
+        overlayRef.current,
+        { opacity: 0, duration: 0.8, ease: ease.outQuart },
+        "liftoff+=1.0",
       )
       .set(overlayRef.current, { display: "none" }, "liftoff+=1.8");
   }, []);
