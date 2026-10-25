@@ -69,17 +69,26 @@ export function PageTransitionColumns() {
     pageColumnsApi.cover = () =>
       new Promise<void>((resolve) => {
         const tl = gsap.timeline({ onComplete: resolve });
-        // yPercent reset first, instant - reveal() leaves columns
-        // translated off the top of the screen (yPercent: -100) once it
-        // finishes, and cover() previously only ever animated scaleY,
-        // never touching yPercent back to 0. Every cover() after the
-        // first was therefore growing columns to full scale while they
-        // sat permanently off-screen above the viewport - "fully
-        // covering" by scale alone, invisible in practice, which is why
-        // this only ever appeared to work once.
-        tl.set(columns, { yPercent: 0 }).fromTo(
+        // yPercent reset folded into this same fromTo, not a separate
+        // sibling .set() - reveal() leaves columns translated off the top
+        // of the screen (yPercent: -100) once it finishes, and this tween
+        // has to force that back to 0 before growing scaleY, or every
+        // cover() after the first grows the columns to full scale while
+        // they sit permanently off-screen - "fully covering" by scale
+        // alone, invisible in practice. A separate `tl.set(columns,
+        // {yPercent:0})` placed right before this call looks like it
+        // should do that, but this tween's own `overwrite: true` kills
+        // *every* existing tween on the target the instant it's created
+        // (not just the ones touching scaleY) - including that sibling
+        // .set(), which is already a constructed tween on this same
+        // timeline by the time this one is built. It gets killed before
+        // the timeline ever renders frame 0, so the reset silently never
+        // happens. Setting both scaleY and yPercent as this one tween's
+        // own "from" values sidesteps that: there's no sibling tween left
+        // for overwrite to kill.
+        tl.fromTo(
           columns,
-          { scaleY: 0 },
+          { scaleY: 0, yPercent: 0 },
           {
             scaleY: 1,
             duration: COVER_DURATION,
