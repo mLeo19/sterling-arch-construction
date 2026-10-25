@@ -331,7 +331,14 @@ export function MenuOverlay({
         ref={backdropRef}
         onClick={onClose}
         aria-hidden
-        className="fixed inset-0 z-40 bg-black opacity-0 pointer-events-none"
+        // TEMP DEBUG - bg-red-600 instead of bg-black: diagnosing a
+        // reported black flash on navigation from the auto-opened footer
+        // menu. This sits at z-40, above everything PageTransition.tsx
+        // controls - if red shows up and lingers instead of vanishing
+        // instantly, skipCloseAnimRef didn't take effect and this backdrop
+        // is fading out over its normal 1s instead of snapping away.
+        // Revert once diagnosed.
+        className="fixed inset-0 z-40 bg-red-600 opacity-0 pointer-events-none"
       />
       <div
         ref={panelRef}
