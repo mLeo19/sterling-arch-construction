@@ -25,6 +25,7 @@ export function MenuOverlay({
   onNavigate,
   returnFocusRef,
   skipCloseAnimRef,
+  skipReturnFocusRef,
   openedByBottomRef,
 }: {
   open: boolean;
@@ -42,6 +43,9 @@ export function MenuOverlay({
   // the doc comment below on why this backdrop-blur panel specifically
   // needs the same treatment.
   skipCloseAnimRef: RefObject<boolean>;
+  // Set by onNavigate in SiteNav.tsx, a dedicated ref rather than reusing
+  // skipCloseAnimRef - see this prop's own read site below for why.
+  skipReturnFocusRef: RefObject<boolean>;
   // True when this open came from scrolling to the very bottom of the page
   // rather than a manual click - see its own doc comment in SiteNav.tsx.
   // Read (never written) here to skip darkening backdropRef on open: the
@@ -82,9 +86,22 @@ export function MenuOverlay({
       hasOpenedRef.current = true;
       firstLinkRef.current?.focus({ preventScroll: true });
     } else if (hasOpenedRef.current) {
-      returnFocusRef.current?.focus({ preventScroll: true });
+      // Skipped when a menu link was actually clicked (onNavigate in
+      // SiteNav.tsx sets this before closing) - the user is leaving this
+      // page entirely via PageTransition, not dismissing this overlay
+      // back to where they were (Escape/backdrop/X), so there's nothing
+      // here for focus to meaningfully return *to*. Refocusing the toggle
+      // button anyway only ever created a stray focus ring on it after
+      // navigating, on engines whose :focus-visible heuristic doesn't
+      // suppress it the way Chromium's does for every script-triggered
+      // focus call.
+      if (skipReturnFocusRef.current) {
+        skipReturnFocusRef.current = false;
+      } else {
+        returnFocusRef.current?.focus({ preventScroll: true });
+      }
     }
-  }, [open, returnFocusRef]);
+  }, [open, returnFocusRef, skipReturnFocusRef]);
 
   const { contextSafe } = useGSAP();
 

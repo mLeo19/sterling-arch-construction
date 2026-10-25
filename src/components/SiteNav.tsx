@@ -45,6 +45,22 @@ export function SiteNav() {
   // which the pill-collapse useGSAP effect above also reads and clears on
   // the same `open` transition before this plain useEffect gets to it.
   const navigatingRef = useRef(false);
+  // Also set in onNavigate, also a dedicated ref rather than reusing
+  // skipCloseAnimRef for the exact same reason as navigatingRef above -
+  // read and cleared only by MenuOverlay's own focus-management effect.
+  // Tells that effect to skip returning focus to this button when the
+  // menu is closing because a link was actually clicked: the user is
+  // leaving this page entirely via PageTransition, not dismissing a
+  // transient overlay back to where they were (Escape/backdrop/X), so
+  // there's nothing here for focus to meaningfully return *to*. Silently
+  // refocusing this button anyway was real estate for a stray focus ring
+  // to show on it after navigating - confirmed live on iOS Safari, which
+  // (unlike Chromium's own :focus-visible heuristic, checked and ruled
+  // out via Playwright) doesn't suppress the ring for every script-
+  // triggered focus call the same way, in particular ones where the
+  // element actually receiving focus was never the one most recently
+  // clicked.
+  const skipReturnFocusRef = useRef(false);
   // True while the current `open: true` state was caused by scrolling to the
   // very bottom of the page (see the atBottom effect below), not a manual
   // click - read by the scroll-lock effect to skip locking in that case, and
@@ -616,11 +632,13 @@ export function SiteNav() {
         open={open}
         returnFocusRef={buttonRef}
         skipCloseAnimRef={skipCloseAnimRef}
+        skipReturnFocusRef={skipReturnFocusRef}
         openedByBottomRef={openedByBottomRef}
         onClose={() => setOpen(false)}
         onNavigate={() => {
           skipCloseAnimRef.current = true;
           navigatingRef.current = true;
+          skipReturnFocusRef.current = true;
           setOpen(false);
         }}
       />
