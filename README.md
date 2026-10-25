@@ -1,36 +1,53 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Sterling Arch Construction
 
-## Getting Started
+A marketing site for a fictional commercial general contractor, built as a
+portfolio piece focused on scroll-driven motion design and animation
+engineering rather than a typical CRUD/content site.
 
-First, run the development server:
+## Stack
+
+- [Next.js 16](https://nextjs.org) (App Router, Turbopack, Cache Components / Partial Prerendering)
+- React 19, TypeScript
+- [GSAP](https://gsap.com) + ScrollTrigger for all motion
+- [Lenis](https://lenis.darkroom.engineering) for smooth scroll
+- Tailwind CSS 4
+
+## Notable technical details
+
+- **Custom page transition system** - full-page pane transitions that stay
+  in sync with pinned ScrollTrigger sections, including correctly reverting
+  and reapplying scroll-linked animations across the transition boundary
+  without visible jumps.
+- **Scroll-driven hero and pinned sections** - parallax drift, pinned-scale
+  cinematic moments, and a horizontal scroll-jacked process section, all
+  built on GSAP ScrollTrigger rather than CSS scroll-timeline.
+- **Offline-baked pencil-sketch effect** - the `/approach` hero's sketch-to-
+  photo reveal is pixel-processed once at build time (edge detection +
+  color-based region suppression) and baked to a static PNG, instead of
+  running expensive per-frame canvas filters during scroll.
+- **Per-word mask-reveal headlines** - reusable `WordReveal` component used
+  across the homepage and project pages.
+- Fully static generation (`generateStaticParams` on every dynamic route)
+  with Partial Prerendering enabled, no server-side data fetching.
+- Self-hosted, `next/image`-optimized images; no remote image dependencies.
+- `sitemap.ts` / `robots.ts`, OpenGraph/Twitter metadata, and a themed
+  favicon that adapts to dark browser chrome.
+
+## Getting started
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build   # production build
+npm run lint    # eslint
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## License
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+All rights reserved - see [LICENSE](./LICENSE). This repository is public
+for portfolio purposes; it is not licensed for reuse.
