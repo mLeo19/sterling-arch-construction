@@ -5,12 +5,7 @@ import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { BrandCube } from "@/components/ui/BrandCube";
-import {
-  COLUMN_COUNT,
-  COLUMN_STAGGER,
-  REVEAL_DURATION,
-  REVEAL_EASE,
-} from "@/components/PageTransitionColumns";
+import { pageColumnsApi } from "@/components/PageTransitionColumns";
 import { site } from "@/lib/data/site";
 import { ease, staggerReveal } from "@/lib/motion";
 
@@ -44,14 +39,6 @@ function IntroLoader({ onReady }: { onReady: () => void }) {
   const cubeShapeRef = useRef<HTMLDivElement>(null);
   const flatIconRef = useRef<HTMLDivElement>(null);
   const wordmarkRef = useRef<HTMLDivElement>(null);
-  // This loader's own set of columns, matching PageTransitionColumns.tsx's
-  // look/timing exactly but a separate DOM instance - that component's
-  // columns have to sit above everything including SiteNav (z-[110]),
-  // while these only ever need to sit above this overlay's own cube/
-  // wordmark content, nested inside the overlay's own z-[100] stacking
-  // context. Sharing the literal DOM nodes across both would mean picking
-  // one z-index that satisfies both relationships, which these two don't.
-  const columnsRef = useRef<HTMLDivElement[]>([]);
 
   useGSAP(() => {
     const prefersReducedMotion = window.matchMedia(
@@ -166,40 +153,32 @@ function IntroLoader({ onReady }: { onReady: () => void }) {
             staggerReveal.stagger * (WORD_LENGTH - 1),
         ) + 0.2,
       )
-      .call(onReady, [], "liftoff")
+      // The handoff to the real page uses the exact same vertical-columns
+      // wipe every other page-to-page navigation uses (see
+      // PageTransitionColumns.tsx) - a plain JS call, not another GSAP
+      // timeline step, since it has to await cover()'s own promise before
+      // doing anything else. Columns are the same cream as this overlay's
+      // own background, so them covering over it is visually seamless
+      // (nothing changes color at any point); only once fully covered does
+      // onReady() fire (letting the real page finish settling in, hidden
+      // behind the columns) and this overlay get cleared, then the columns
+      // retract exactly as they would after any other navigation.
+      .call(
+        () => {
+          pageColumnsApi.cover().then(() => {
+            onReady();
+            gsap.set(overlayRef.current, { display: "none" });
+            pageColumnsApi.reveal();
+          });
+        },
+        [],
+        "liftoff",
+      )
       .set(overlayRef.current, { pointerEvents: "none" }, "liftoff")
       .to(
         groupRef.current,
         { y: -70, opacity: 0, duration: 1.0, ease: "power2.in" },
         "liftoff",
-      )
-      // The color shift still happens first, same as always - this briefly
-      // reads as the loader settling into black before the page shows
-      // through. What changed: the handoff to the real page now uses the
-      // exact same vertical-columns reveal every other page-to-page
-      // navigation uses (see PageTransitionColumns.tsx), not a fade -
-      // columns snap straight to their fully-covering state (instant, no
-      // animation) while still completely hidden behind this still-opaque
-      // black overlay, which then disappears in the same tick. Both are
-      // solid black at that exact instant, so the swap from "overlay" to
-      // "columns, already covering" has no visible seam - the columns
-      // then retract exactly as they would after any other navigation.
-      .to(
-        overlayRef.current,
-        { backgroundColor: "#000000", duration: 1.0, ease: ease.outQuart },
-        "liftoff",
-      )
-      .set(columnsRef.current, { scaleY: 1 }, "liftoff+=1.0")
-      .set(overlayRef.current, { display: "none" }, "liftoff+=1.0")
-      .to(
-        columnsRef.current,
-        {
-          yPercent: -100,
-          duration: REVEAL_DURATION,
-          ease: REVEAL_EASE,
-          stagger: COLUMN_STAGGER,
-        },
-        "liftoff+=1.0",
       );
   }, []);
 
@@ -240,25 +219,6 @@ function IntroLoader({ onReady }: { onReady: () => void }) {
             </span>
           ))}
         </div>
-      </div>
-      {/* z-10, not explicit stacking order against groupRef - a sibling
-          without one would stack by DOM order by default anyway (this is
-          already last), but spelling it out means a future reorder of
-          this JSX can't silently break which one paints on top. Starts at
-          scale-y-0 (hidden) and only ever becomes visible via the
-          timeline's instant liftoff+1.0 set, never an animated entrance -
-          unlike PageTransitionColumns.tsx's own columns, these never need
-          to animate *in*, only snap to covering then animate back out. */}
-      <div className="pointer-events-none absolute inset-0 z-10 flex">
-        {Array.from({ length: COLUMN_COUNT }).map((_, i) => (
-          <div
-            key={i}
-            ref={(el) => {
-              if (el) columnsRef.current[i] = el;
-            }}
-            className="h-full flex-1 origin-bottom scale-y-0 bg-black"
-          />
-        ))}
       </div>
     </div>
   );

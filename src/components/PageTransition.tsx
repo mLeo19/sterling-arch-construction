@@ -115,20 +115,23 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
 
       transitioningRef.current = true;
 
-      const routeCommitted = new Promise<void>((resolve) => {
-        resolveRef.current = resolve;
-      });
-      router.push(href);
-
-      // Covering and waiting for the new route to commit run concurrently,
-      // not sequentially - the columns' own cover animation sets the
-      // transition's minimum duration, with actual route-load time (if
-      // slower) simply extending the hold rather than adding on top of it.
-      Promise.all([pageColumnsApi.cover(), routeCommitted])
-        .then(() => pageColumnsApi.reveal())
-        .finally(() => {
-          transitioningRef.current = false;
+      // Sequential, not concurrent: the columns have to be fully, solidly
+      // covering - not mid-stagger - before the route swap happens
+      // underneath, or a fast (likely, since this site is fully static)
+      // navigation can land while some columns haven't grown in yet,
+      // visible through the gap. router.push() only fires once cover()'s
+      // own promise has actually resolved.
+      pageColumnsApi.cover().then(() => {
+        const routeCommitted = new Promise<void>((resolve) => {
+          resolveRef.current = resolve;
         });
+        router.push(href);
+        routeCommitted
+          .then(() => pageColumnsApi.reveal())
+          .finally(() => {
+            transitioningRef.current = false;
+          });
+      });
     }
 
     // Capture phase so this always runs before Link's own click handling

@@ -9,12 +9,7 @@ import { site } from "@/lib/data/site";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { useIntroReady } from "@/components/motion/IntroSequence";
 import { WordReveal } from "@/components/motion/WordReveal";
-import {
-  ease,
-  heroTextBudget,
-  pageTransitionRiseTime,
-  pageTransitionState,
-} from "@/lib/motion";
+import { ease, heroTextBudget } from "@/lib/motion";
 
 export default function Hero() {
   const sectionRef = useRef<HTMLElement>(null);
@@ -82,29 +77,14 @@ export default function Hero() {
         return;
       }
 
-      // This whole section is rendered inside PageTransition's contentRef -
-      // the exact element that component translates/scales as its incoming
-      // pane (see PageTransition.tsx). Times off pageTransitionRiseTime (the
-      // pane's Y-rise only), not its full settle (rise AND scale-grow) - see
-      // that function's own doc comment in lib/motion.ts for why.
-      //
-      // Branches on whether THIS mount is the initial load or a later
-      // client-side navigation, via pageTransitionState (lib/motion.ts) -
-      // the pane's own rise is faster on a subsequent navigation (~0.65s)
-      // than the initial load (~0.9s, slower there because it's also racing
-      // the intro loader's liftoff).
-      // Only the true initial load (still gated behind the intro loader's
-      // own liftoff/fade timing) waits on this delay - a subsequent
-      // navigation back to "/" has no pane to wait for anymore (see
-      // PageTransition.tsx), so it reveals immediately instead of sitting
-      // blank for an extra beat after the browser's own page crossfade has
-      // already settled.
-      const isInitialLoad = !pageTransitionState.hasPlayedInitial;
-      const pageRevealDelay = isInitialLoad
-        ? pageTransitionRiseTime(true)
-        : 0;
-      const topBarDelay = pageRevealDelay;
-      const headlineDelay = pageRevealDelay + 0.1;
+      // No reveal delay needed here anymore, initial load or not - this
+      // whole section only ever becomes visible once PageTransitionColumns'
+      // vertical-columns wipe has already retracted (see that file and
+      // IntroSequence.tsx's own liftoff handoff), so there's nothing left
+      // for this text to wait on; it can just fade in on its own natural
+      // timing the instant it's uncovered.
+      const topBarDelay = 0;
+      const headlineDelay = 0.1;
 
       // heroTextBudget derives a *ceiling* for each element here from the
       // nav's own actual settle time (navEntranceSettleTime, see
