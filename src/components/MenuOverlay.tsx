@@ -22,7 +22,6 @@ const subLinks = [
 export function MenuOverlay({
   open,
   onClose,
-  onNavigate,
   returnFocusRef,
   skipCloseAnimRef,
   skipReturnFocusRef,
@@ -30,10 +29,6 @@ export function MenuOverlay({
 }: {
   open: boolean;
   onClose: () => void;
-  // Distinct from onClose: fires only for links that actually navigate
-  // somewhere, not the backdrop/explicit dismiss - see the skipCloseAnimRef
-  // comment in SiteNav.tsx for why the two need to be told apart.
-  onNavigate: () => void;
   // Focus returns here on close, wherever "here" is (the nav's hamburger
   // button) - keeps keyboard focus from silently landing on <body>.
   returnFocusRef: RefObject<HTMLButtonElement | null>;
@@ -43,8 +38,9 @@ export function MenuOverlay({
   // the doc comment below on why this backdrop-blur panel specifically
   // needs the same treatment.
   skipCloseAnimRef: RefObject<boolean>;
-  // Set by onNavigate in SiteNav.tsx, a dedicated ref rather than reusing
-  // skipCloseAnimRef - see this prop's own read site below for why.
+  // Set by pageTransitionState.onNavigate (registered in SiteNav.tsx, see
+  // its own doc comment in lib/motion.ts), a dedicated ref rather than
+  // reusing skipCloseAnimRef - see this prop's own read site below for why.
   skipReturnFocusRef: RefObject<boolean>;
   // True when this open came from scrolling to the very bottom of the page
   // rather than a manual click - see its own doc comment in SiteNav.tsx.
@@ -86,9 +82,10 @@ export function MenuOverlay({
       hasOpenedRef.current = true;
       firstLinkRef.current?.focus({ preventScroll: true });
     } else if (hasOpenedRef.current) {
-      // Skipped when a menu link was actually clicked (onNavigate in
-      // SiteNav.tsx sets this before closing) - the user is leaving this
-      // page entirely via PageTransition, not dismissing this overlay
+      // Skipped when a real navigation actually started (SiteNav's own
+      // pageTransitionState.onNavigate registration sets this before
+      // closing) - the user is leaving this page entirely via
+      // PageTransition, not dismissing this overlay
       // back to where they were (Escape/backdrop/X), so there's nothing
       // here for focus to meaningfully return *to*. Refocusing the toggle
       // button anyway only ever created a stray focus ring on it after
@@ -412,7 +409,6 @@ export function MenuOverlay({
                     data-reveal-link
                     ref={i === 0 ? firstLinkRef : undefined}
                     href={link.href}
-                    onClick={onNavigate}
                     onMouseEnter={(e) =>
                       contextSafe(() => runLinkHoverIn(e.currentTarget))()
                     }
@@ -488,7 +484,7 @@ export function MenuOverlay({
         </div>
 
         <div ref={quoteWrapRef} className="mt-[4vw] opacity-0 sm:mt-[1.5vw]">
-          <Button href="/contact" onClick={onNavigate} className="w-full justify-center">
+          <Button href="/contact" className="w-full justify-center">
             Get a Quote
           </Button>
         </div>

@@ -9,7 +9,7 @@ import { MenuOverlay } from "@/components/MenuOverlay";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { useIntroReady } from "@/components/motion/IntroSequence";
 import { useLenis } from "@/components/SmoothScroll";
-import { ease, navEntrance } from "@/lib/motion";
+import { ease, navEntrance, pageTransitionState } from "@/lib/motion";
 
 const sectionLabels: Record<string, string> = {
   "/": "Home",
@@ -40,13 +40,14 @@ export function SiteNav() {
   const labelRef = useRef<HTMLSpanElement>(null);
   const burgerLinesRef = useRef<HTMLSpanElement>(null);
   const skipCloseAnimRef = useRef(false);
-  // Set in onNavigate below, read and cleared only by the scroll-lock effect
-  // further down - a dedicated ref rather than reusing skipCloseAnimRef,
-  // which the pill-collapse useGSAP effect above also reads and clears on
-  // the same `open` transition before this plain useEffect gets to it.
+  // Set by the pageTransitionState.onNavigate registration below, read and
+  // cleared only by the scroll-lock effect further down - a dedicated ref
+  // rather than reusing skipCloseAnimRef, which the pill-collapse useGSAP
+  // effect above also reads and clears on the same `open` transition before
+  // this plain useEffect gets to it.
   const navigatingRef = useRef(false);
-  // Also set in onNavigate, also a dedicated ref rather than reusing
-  // skipCloseAnimRef for the exact same reason as navigatingRef above -
+  // Also set by that same registration, also a dedicated ref rather than
+  // reusing skipCloseAnimRef for the exact same reason as navigatingRef above -
   // read and cleared only by MenuOverlay's own focus-management effect.
   // Tells that effect to skip returning focus to this button when the
   // menu is closing because a link was actually clicked: the user is
@@ -79,6 +80,34 @@ export function SiteNav() {
   useEffect(() => {
     openRef.current = open;
   }, [open]);
+
+  // Registers this nav as PageTransition's one universal "a real navigation
+  // is starting" signal (see pageTransitionState.onNavigate's own doc
+  // comment in lib/motion.ts) - replaces an earlier version of this that
+  // only closed the menu this way for clicks on links *inside* the open
+  // MenuOverlay panel (via an onNavigate prop threaded down to each of its
+  // links), which missed every other way a navigation can start while the
+  // menu happens to be open: the home logo below (part of this pill, never
+  // inside MenuOverlay) and Footer's own separate links are the two
+  // confirmed-live cases - a user scrolled to a page's bottom (which
+  // auto-opens this menu, see the atBottom effect below) who then clicks
+  // either one left the menu to play its full animated close on top of
+  // PageTransition's own rise, a stray dark panel floating over the
+  // transition - confirmed live via Playwright. Empty deps - registers once
+  // and reads openRef/the refs below fresh on every actual call, same
+  // pattern as the click-listener effect in PageTransition.tsx.
+  useEffect(() => {
+    pageTransitionState.onNavigate = () => {
+      if (!openRef.current) return;
+      skipCloseAnimRef.current = true;
+      navigatingRef.current = true;
+      skipReturnFocusRef.current = true;
+      setOpen(false);
+    };
+    return () => {
+      pageTransitionState.onNavigate = null;
+    };
+  }, []);
 
   if (pathname !== previousPathname) {
     setPreviousPathname(pathname);
@@ -113,6 +142,29 @@ export function SiteNav() {
     let wasAtBottom = false;
     function check() {
       ticking = false;
+      // Gated on pageTransitionState.hasPlayedInitial (lib/motion.ts), not
+      // just a document-height sanity check - the very first page rises as
+      // PageTransition's own pane too now (see that file), parked
+      // position:fixed behind a one-viewport-tall placeholder spacer
+      // standing in for it for as long as that rise is still in progress:
+      // document.documentElement.scrollHeight is genuinely, exactly one
+      // viewport tall that whole time (confirmed live via Playwright -
+      // scrollHeight pinned at exactly window.innerHeight from t=0 until
+      // the real page returns to flow), which satisfies "at the bottom"
+      // trivially regardless of how tall the real page actually is. Not a
+      // height-comparison problem to out-clever with a bigger placeholder -
+      // any single fixed placeholder height has the same failure mode for
+      // a short enough real page. hasPlayedInitial specifically (read
+      // fresh on every call, not a ready-flip snapshot some ref would have
+      // to mirror) is what's actually needed here: it only flips once
+      // PageTransition's handleSettled has run for that first pane,
+      // meaning the DOM has already been returned to normal flow with its
+      // real height by the time this ever reads true - `ready` alone turns
+      // true a good ~1.25s earlier, while that pane is still mid-rise and
+      // scrollHeight is still just the placeholder's one viewport. This
+      // feature is about real user scrolling on an already-settled page;
+      // there isn't one yet before that.
+      if (!pageTransitionState.hasPlayedInitial) return;
       const atBottom =
         window.scrollY + window.innerHeight >=
         document.documentElement.scrollHeight - EPSILON;
@@ -635,12 +687,6 @@ export function SiteNav() {
         skipReturnFocusRef={skipReturnFocusRef}
         openedByBottomRef={openedByBottomRef}
         onClose={() => setOpen(false)}
-        onNavigate={() => {
-          skipCloseAnimRef.current = true;
-          navigatingRef.current = true;
-          skipReturnFocusRef.current = true;
-          setOpen(false);
-        }}
       />
     </>
   );

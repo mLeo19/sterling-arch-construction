@@ -40,25 +40,41 @@ import { useGSAP } from "@gsap/react";
  * only recreate a live one after a hardcoded delay matched to that old
  * transition's settle time.
  *
- * That whole premise is gone: PageTransition is now a solid, opaque
- * column-wipe overlay (see PageTransitionColumns.tsx) that deliberately
- * never touches, measures, or scales the actual page content, and calls
- * `ScrollTrigger.refresh()` nowhere at all (grep confirms zero call sites
- * left in this codebase). Keeping the measure-kill-reapply dance after
- * that mechanism was removed didn't just become unnecessary - it became
- * the bug: the initial measurement still ran as a layout effect, which
- * fires before PageTransition's own *passive* effect resets scroll to 0
- * on navigation, so it baked in a `yPercent` computed against the
- * *previous* page's leftover scroll position. The delayed recreate then
- * snapped from that stale value to the correct one on a fixed timer tied
- * to constants from the transition system that no longer exists - a
- * visible jump in the hero image right after the page transition reveals,
- * confirmed live via Playwright (translateY jumping from a stale
- * mid-20s-px value to its correct resting one about 1.3s after
- * navigating). A single live ScrollTrigger, created once and never killed,
- * naturally tracks the real scroll position as PageTransition resets it -
- * same as any other scroll-driven element on the page - so there's nothing
- * left to bake in or snap away from.
+ * That specific premise (refresh() running while the page is still
+ * distorted) is gone, even though PageTransition has since gone back to a
+ * real sliding pane: this element's own wrapper is made position:fixed
+ * synchronously, via an inline style applied at render time, before this
+ * component's own ScrollTrigger is ever created - see TransitionPane's own
+ * doc comment in PageTransition.tsx.
+ *
+ * Known remaining limitation: a live ScrollTrigger measured while its
+ * trigger element sits inside a position:fixed ancestor (as it does for
+ * the duration of PageTransition's own rise) can still read a slightly
+ * different value than its final, settled-into-normal-flow measurement -
+ * confirmed live via Playwright on this project's own hero image, a real
+ * but brief (single-frame) pop in the backdrop's drift position the
+ * instant the pane finishes rising and scroll resets. A fix gating
+ * live-trigger creation behind the ancestor pane's own settled state was
+ * attempted and reverted: the natural "fix" (render a hand-derived
+ * -amount/2 resting value in the meantime) turned out to depend on this
+ * wrapper's own height being final at that early point, which it isn't
+ * reliably - the static value and the eventual live-measured one didn't
+ * actually agree once tested properly (-33.6px vs the real -24.6px for
+ * this hero), making the attempted fix not meaningfully better than the
+ * jump it was meant to prevent, while adding real complexity (a new
+ * cross-component context). Left as a known, minor follow-up rather than
+ * risking a fix that isn't actually solid - see PaneSettledContext's own
+ * history in PageTransition.tsx's git log if revisiting this.
+ *
+ * Separate historical bug, same underlying lesson (don't trust a
+ * ScrollTrigger measurement taken against a transitional layout state):
+ * the one-time measurement from the old (now fully removed) measure-kill-
+ * reapply workaround ran as a layout effect, firing before the scroll-reset
+ * that would have made it correct, baking in a `yPercent` computed against
+ * the previous page's leftover scroll position, then snapping to the right
+ * value on an unrelated timer over a second later. A single live
+ * ScrollTrigger, created once and never killed, naturally tracks real
+ * scroll position - same as any other scroll-driven element on the page.
  */
 export function Parallax({
   children,

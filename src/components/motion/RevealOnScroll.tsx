@@ -4,7 +4,7 @@ import { useRef } from "react";
 import { gsap } from "@/lib/gsap";
 import { useGSAP } from "@gsap/react";
 import { useIntroReady } from "@/components/motion/IntroSequence";
-import { duration, ease, pageTransitionRiseTime, pageTransitionState } from "@/lib/motion";
+import { duration, ease, pageSlideDuration, pageTransitionState } from "@/lib/motion";
 
 export function RevealOnScroll({
   children,
@@ -35,10 +35,11 @@ export function RevealOnScroll({
       // Gating on `ready` (above) stops this from finishing behind the
       // intro loader's own opaque overlay, but an above-the-fold instance's
       // ScrollTrigger is already satisfied the instant `ready` flips, so
-      // its fade can still finish before PageTransition's pane has risen
-      // far enough to show it. Delaying the start by the pane's own rise
-      // time (pageTransitionRiseTime) closes that gap - same fix, same
-      // reasoning as Hero.tsx's own text reveal.
+      // its fade can still finish before the page's own incoming pane
+      // (every load now, the very first included - see PageTransition.tsx)
+      // has actually risen enough to show it. Delaying the start by that
+      // pane's own rise duration (pageSlideDuration) closes that gap - same
+      // fix, same reasoning as Hero.tsx's own text reveal.
       //
       // Scoped to only the instances that actually need it: elements
       // already inside the "top 85%" trigger zone at this exact moment
@@ -49,22 +50,20 @@ export function RevealOnScroll({
       // long after mount that happens to be - so it never needed this delay
       // at all. Applying it unconditionally to every instance (the previous
       // version) meant *every* section on the page, not just the one or two
-      // above the fold, carried a fixed ~0.9s tax on top of its own
-      // duration the instant its real trigger fired, which is what made
-      // scrolling through the page read as sluggish.
+      // above the fold, carried a fixed ~1s tax on top of its own duration
+      // the instant its real trigger fired, which is what made scrolling
+      // through the page read as sluggish.
       //
-      // Also only on the initial load. On every subsequent navigation, an
-      // above-the-fold trigger's first real fire already lands after
-      // PageTransition's (much shorter) settle time on its own, via
-      // ScrollTrigger's own refresh cycle - a just-created trigger's first
-      // evaluation happens on the *next* refresh pass, not the synchronous
-      // one PageTransition fires moments after creating it. Adding this
-      // same delay to every navigation would just make an already-correct
-      // case more sluggish for no reason.
+      // Also only on the initial load - every other navigation's incoming
+      // pane already decodes its own priority images and only starts
+      // rising once that's done (see PageTransition.tsx), so an
+      // above-the-fold trigger there never fires while still hidden in the
+      // first place. Adding this same delay to every navigation would just
+      // make an already-correct case more sluggish for no reason.
       const isInitialLoad = !pageTransitionState.hasPlayedInitial;
       const startsAboveTheFold = ref.current.getBoundingClientRect().top <= window.innerHeight * 0.85;
       const pageRevealDelay =
-        isInitialLoad && startsAboveTheFold ? pageTransitionRiseTime(true) : 0;
+        isInitialLoad && startsAboveTheFold ? pageSlideDuration : 0;
       // Quick, not a long settle - but outSoft (true power2/cubic), not the
       // steeper outCubic/outQuart tokens: those are quartic/quintic-strength
       // curves that front-load almost all of the motion into the opening

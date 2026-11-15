@@ -9,7 +9,7 @@ import { site } from "@/lib/data/site";
 import { Eyebrow } from "@/components/ui/Eyebrow";
 import { useIntroReady } from "@/components/motion/IntroSequence";
 import { WordReveal } from "@/components/motion/WordReveal";
-import { ease, heroTextBudget } from "@/lib/motion";
+import { ease, heroTextBudget, pageSlideDuration } from "@/lib/motion";
 
 export default function Hero() {
   const sectionRef = useRef<HTMLElement>(null);
@@ -77,14 +77,17 @@ export default function Hero() {
         return;
       }
 
-      // No reveal delay needed here anymore, initial load or not - this
-      // whole section only ever becomes visible once PageTransitionColumns'
-      // vertical-columns wipe has already retracted (see that file and
-      // IntroSequence.tsx's own liftoff handoff), so there's nothing left
-      // for this text to wait on; it can just fade in on its own natural
-      // timing the instant it's uncovered.
-      const topBarDelay = 0;
-      const headlineDelay = 0.1;
+      // This whole section is rendered inside PageTransition's own
+      // TransitionPane wrapper - the exact element that component
+      // translates as its incoming pane, on *every* load now, the very
+      // first included (see PageTransition.tsx) - so this always times off
+      // pageSlideDuration (lib/motion.ts), the pane's own rise duration,
+      // regardless of initial vs. subsequent navigation. Without this, the
+      // text would finish most of its own fade while still hidden
+      // off-screen inside the pane, landing already mostly visible the
+      // instant it's actually uncovered instead of visibly revealing.
+      const topBarDelay = pageSlideDuration;
+      const headlineDelay = topBarDelay + 0.1;
 
       // heroTextBudget derives a *ceiling* for each element here from the
       // nav's own actual settle time (navEntranceSettleTime, see

@@ -4,7 +4,7 @@ import { Fragment, useRef } from "react";
 import { gsap } from "@/lib/gsap";
 import { useGSAP } from "@gsap/react";
 import { useIntroReady } from "@/components/motion/IntroSequence";
-import { heroTextBudget, staggerReveal } from "@/lib/motion";
+import { heroTextBudget, pageSlideDuration, staggerReveal } from "@/lib/motion";
 
 /**
  * Per-word mask reveal for a page's own heading - each word gets its own
@@ -38,11 +38,11 @@ export function WordReveal({
         return;
       }
 
-      // No reveal delay needed here, initial load or not - see Hero.tsx's
-      // own matching comment on topBarDelay/headlineDelay: this only ever
-      // becomes visible once PageTransitionColumns' columns have already
-      // retracted, so there's nothing left to wait on.
-      const wordsDelay = 0.1;
+      // See Hero.tsx's own matching comment on topBarDelay/headlineDelay -
+      // this section is rendered inside PageTransition's own pane, on
+      // every load now (the very first included), so it always times off
+      // pageSlideDuration.
+      const wordsDelay = pageSlideDuration + 0.1;
       const wordsBudget = heroTextBudget(wordsDelay);
 
       // Same duration:stagger ratio as staggerReveal always, only scaled

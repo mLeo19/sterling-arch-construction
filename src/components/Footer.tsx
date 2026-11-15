@@ -5,6 +5,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useGSAP } from "@gsap/react";
 import { gsap } from "@/lib/gsap";
+import { pageTransitionSettleDuration } from "@/lib/motion";
 import { site } from "@/lib/data/site";
 import { getProject, projects } from "@/lib/data/projects";
 import { services } from "@/lib/data/services";
@@ -104,18 +105,16 @@ export function Footer() {
 
   const { contextSafe } = useGSAP();
 
-  // Instant, not an animated crossfade - runCrossfade only ever fires from
-  // the pathname-change effect below, which means a PageTransition entrance
-  // is always running at the same moment (every pathname change triggers
-  // both). That pane covers the whole screen well within a second, so an
-  // animated fade here never actually gets to play out cleanly on its own -
-  // it was running as a second, independent, unsynchronized timeline on top
-  // of the main transition's own rise/darken animation, and the moment of
-  // both partially-opaque layers overlapping read as a visible glitch
-  // rather than a smooth crossfade. The two-layer wait-for-load mechanism
-  // itself still matters (see pendingRef's doc comment - swapping before
-  // the new photo has decoded would show a blank flash), only the fade
-  // duration changes.
+  // Instant, not an animated crossfade - once it actually runs (see the
+  // delayedCall in handleLoadA/handleLoadB below for *when* that is), it's
+  // a hard cut, not a tween. An animated fade here never gets to play out
+  // cleanly anyway: a PageTransition entrance is always running at the same
+  // moment (every pathname change triggers both), as a second, independent,
+  // unsynchronized timeline on top of the main transition's own rise - the
+  // moment of both partially-opaque layers overlapping read as a visible
+  // glitch rather than a smooth crossfade. The two-layer wait-for-load
+  // mechanism itself still matters regardless (see pendingRef's doc comment
+  // - swapping before the new photo has decoded would show a blank flash).
   function runCrossfade(layer: "A" | "B") {
     const incomingRef = layer === "A" ? layerARef : layerBRef;
     const outgoingRef = layer === "A" ? layerBRef : layerARef;
@@ -135,20 +134,48 @@ export function Footer() {
     (back === "A" ? setImageA : setImageB)(next);
   }, [pathname]);
 
-  // contextSafe wraps (and immediately calls) runCrossfade here, inside the
-  // event handler itself, rather than once up front during render - the
-  // wrap only needs to happen before whichever call actually reads the
-  // refs/runs the tween, and doing it here keeps every ref access confined
-  // to an event-handler callback.
+  // contextSafe wraps runCrossfade here, inside the event handler itself,
+  // rather than once up front during render - the wrap only needs to
+  // happen before whichever call actually reads the refs/runs the tween,
+  // and doing it here keeps every ref access confined to an event-handler
+  // callback.
+  //
+  // Delayed by pageTransitionSettleDuration (lib/motion.ts), not run the
+  // instant the image loads - this footer is outside PageTransition
+  // entirely (see layout.tsx), so it's never hidden behind that component's
+  // own rising pane the way the rest of a page's content is. Running this
+  // crossfade immediately on load swapped this footer's own backdrop to
+  // the *new* route's photo the moment that photo finished decoding -
+  // often within single-digit milliseconds, since it's frequently the
+  // exact same file Hero.tsx already preloaded - well before the incoming
+  // pane had even started its own visible rise. Confirmed live via
+  // Playwright: a direct DOM query 150ms into a navigation found this
+  // footer's own image element already fully opaque and showing the new
+  // route's photo. If this footer happened to be anywhere near the
+  // viewport at that moment (scrolled partway down a page, say), the user
+  // saw that same photo flash in on its own, unscaled and un-animated,
+  // *before* the real pane later rose over the same spot showing it again
+  // - reading as a duplicated, broken transition rather than one clean
+  // reveal. Delaying until the pane's own worst-case settle time means
+  // this swap only ever happens once the pane has already covered the
+  // whole screen (this footer included, regardless of scroll position),
+  // matching what the "instant, not animated" choice above always assumed
+  // was already true.
   function handleLoadA() {
     if (pendingRef.current !== "A") return;
     pendingRef.current = null;
-    contextSafe(() => runCrossfade("A"))();
+    gsap.delayedCall(
+      pageTransitionSettleDuration,
+      contextSafe(() => runCrossfade("A")),
+    );
   }
   function handleLoadB() {
     if (pendingRef.current !== "B") return;
     pendingRef.current = null;
-    contextSafe(() => runCrossfade("B"))();
+    gsap.delayedCall(
+      pageTransitionSettleDuration,
+      contextSafe(() => runCrossfade("B")),
+    );
   }
 
   return (

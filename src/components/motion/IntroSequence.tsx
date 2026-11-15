@@ -5,9 +5,8 @@ import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { BrandCube } from "@/components/ui/BrandCube";
-import { pageColumnsApi } from "@/components/PageTransitionColumns";
 import { site } from "@/lib/data/site";
-import { ease, staggerReveal } from "@/lib/motion";
+import { ease, introFadeOutDuration, staggerReveal } from "@/lib/motion";
 
 // BrandMark's hexagon measures 33 wide x 36 tall (viewBox units), not a
 // perfectly regular hexagon's sqrt(3)/2 height-to-width ratio - this stretch
@@ -153,29 +152,28 @@ function IntroLoader({ onReady }: { onReady: () => void }) {
             staggerReveal.stagger * (WORD_LENGTH - 1),
         ) + 0.2,
       )
-      // The handoff to the real page uses the exact same vertical-columns
-      // wipe every other page-to-page navigation uses (see
-      // PageTransitionColumns.tsx) - a plain JS call, not another GSAP
-      // timeline step, since it has to await cover()'s own promise before
-      // doing anything else. The columns' own black reads clearly against
-      // this overlay's cream background as they spring up, which is the
-      // whole point (an earlier cream-on-cream version made that motion
-      // invisible here specifically). Only once fully covered does
-      // onReady() fire (letting the real page finish settling in, hidden
-      // behind the columns) and this overlay get cleared, then the columns
-      // retract exactly as they would after any other navigation.
-      .call(
-        () => {
-          pageColumnsApi.cover().then(() => {
-            onReady();
-            gsap.set(overlayRef.current, { display: "none" });
-            pageColumnsApi.reveal();
-          });
+      // The handoff to the real page is a plain opacity fade-out of this
+      // overlay - deliberately not PageTransition's own pane/slide
+      // mechanism. There's no "outgoing page" to hold onto at intro time
+      // (this is overlay -> first real page, not page -> page), so reusing
+      // that machinery here would be solving a problem that doesn't exist.
+      // onReady() fires at the start of the fade, not after it completes -
+      // the real first page starts settling in while still partly hidden
+      // behind the fading overlay (RevealOnScroll.tsx's own
+      // introFadeOutDuration delay is what keeps an above-the-fold reveal
+      // from finishing before the overlay has faded enough to show it).
+      .call(onReady, [], "liftoff")
+      .set(overlayRef.current, { pointerEvents: "none" }, "liftoff")
+      .to(
+        overlayRef.current,
+        {
+          opacity: 0,
+          duration: introFadeOutDuration,
+          ease: "power2.out",
+          onComplete: () => gsap.set(overlayRef.current, { display: "none" }),
         },
-        [],
         "liftoff",
       )
-      .set(overlayRef.current, { pointerEvents: "none" }, "liftoff")
       .to(
         groupRef.current,
         { y: -70, opacity: 0, duration: 1.0, ease: "power2.in" },

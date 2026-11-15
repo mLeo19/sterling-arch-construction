@@ -14,11 +14,21 @@ engineering rather than a typical CRUD/content site.
 
 ## Notable technical details
 
-- **Custom page transition system** - a solid vertical-columns wipe that
-  covers the screen before swapping routes underneath, deliberately never
-  touching, measuring, or cloning the live page content. That constraint
-  is what keeps it immune to the cross-browser flashing/repaint bugs a
-  more elaborate clone-and-crossfade transition would otherwise chase.
+- **Custom page transition system** - modeled on fluid.glass: the incoming
+  page rises from fully offscreen, growing from a smaller scale up to full
+  size, while the outgoing page stays real and visible underneath (darkened
+  partway through, so two pages with the same white background don't read
+  as one page's text sliding by itself). The outgoing page is never
+  unmounted mid-transition - both pages coexist as live, stable React
+  subtrees for the transition's duration - except for the one moment it has
+  to be swapped out for a static DOM snapshot right before navigating, since
+  Next's router would otherwise re-render it to the new route out from
+  under the still-visible pane. That snapshot's own position is locked
+  independently of the live page underneath it, which stays frozen (height
+  and all) regardless of whatever route it silently re-renders to - see the
+  doc comments around `handleClick`/`TransitionPane` in `PageTransition.tsx`
+  for the handful of narrow, scroll-position-dependent bugs this correctness
+  took a few rounds to chase down.
 - **Scroll-driven hero and pinned sections** - parallax drift, pinned-scale
   cinematic moments, and a horizontal scroll-jacked process section, all
   built on GSAP ScrollTrigger rather than CSS scroll-timeline.
