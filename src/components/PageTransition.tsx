@@ -308,6 +308,27 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     routerRef.current = router;
   }, [router]);
 
+  // Browser back/forward restores scroll position natively, synchronously,
+  // as part of the browser's own history traversal - before any JS on this
+  // page (including the popstate handler below, which needs the *outgoing*
+  // page's own scrollY, not the destination's) ever runs. Left at its
+  // default ("auto"), that native restoration would corrupt the popstate
+  // handler's own scroll-alignment math with whatever scroll position the
+  // destination route happened to have cached, read before this app's own
+  // code gets a chance to see the real, current (outgoing) scrollY at all.
+  // "manual" disables only the browser's own native auto-restore - it
+  // doesn't stop this app's own settle-time scroll reset (see the
+  // settleTick layout effect above), which already resets scroll to 0 on
+  // every navigation regardless of how it started, keeping back/forward
+  // consistent with every other nav in this app rather than introducing a
+  // separate "restore where you were" behavior nothing else here has.
+  // Empty deps - set once, for this component's entire lifetime.
+  useEffect(() => {
+    if (typeof history !== "undefined" && "scrollRestoration" in history) {
+      history.scrollRestoration = "manual";
+    }
+  }, []);
+
   // Fires once React has actually committed a real navigation (pathname
   // genuinely changed), mounting the new route's children into whichever
   // slot isn't currently active. Scroll is locked here, immediately - not
@@ -520,6 +541,293 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     transitioningRef.current = false;
   }, [settleTick, lenisRef]);
 
+  // Snapshots the current outgoing page - the clone/freeze/darken/height-
+  // lock sequence that used to live directly inside handleClick below,
+  // extracted so the popstate listener further down can give browser
+  // back/forward navigations the exact same treatment. A plain function,
+  // not useCallback - it only ever reads refs and globals (activeIdRef,
+  // paneNodesRef, snapshotHostRef, lockedOutgoingHeightRef, window.*), never
+  // props or state captured by value, so a fresh instance every render
+  // behaves identically to every other - safe to call from either of the
+  // two empty-deps effects below regardless of which render's instance they
+  // actually closed over.
+  //
+  // Extracted after a real bug: browser back/forward bypasses handleClick
+  // entirely (popstate fires without ever routing through a click), so
+  // before this was pulled out, that one navigation path never got the
+  // outgoing page cloned, frozen, or darkened at all - reproducing, every
+  // time, exactly the "next page appears instantly, before the real
+  // transition" bug this whole mechanism was built to prevent in the first
+  // place (see snapshotHostRef's own doc comment), plus knock-on scroll/
+  // layout symptoms (Footer momentarily disappearing) from the outgoing
+  // page's height never getting locked either. Confirmed live: reproducible
+  // on *every* back-button press, not intermittently - a structural gap in
+  // coverage, not a timing race.
+  function snapshotOutgoingPage() {
+    // Snapshot the currently-active (about-to-be-outgoing) pane's real DOM
+    // *before* the route actually changes - see snapshotHostRef's own doc
+    // comment for why this has to be a static clone, not a live React
+    // subtree, and why it has to happen before navigating rather than after
+    // (once pathname has already changed, the live version this clones from
+    // may have already re-rendered to show the new route).
+    const activeId = activeIdRef.current;
+    const activeNode =
+      activeId !== undefined ? paneNodesRef.current.get(activeId) : null;
+    const host = snapshotHostRef.current;
+    if (!activeNode || !host) return;
+
+    // Measured once, up front - reused below both to size scrollContainer's
+    // own padding (so its scrollable range covers the real scrollY even
+    // past the clone's own content) and to lock activeNode's own
+    // contribution to document flow (see that line's own doc comment
+    // further down) - a single source of truth rather than measuring the
+    // same box twice.
+    const activeHeight = activeNode.getBoundingClientRect().height;
+
+    // The snapshot mechanism went through several designs chasing bugs
+    // in this same family - scrolled-down-page repros showing the
+    // wrong content, or nothing, instead of what was actually on
+    // screen - each confirmed live via Playwright or, for three of
+    // them, only reproducible on an actual iPhone (desktop/headless
+    // engines, including Playwright's own iPhone device profile,
+    // missed all three - see [[feedback_real_device_testing_gap]] if
+    // that memory still exists). The abbreviated history, oldest
+    // first, in case a future bug traces back to one of these same
+    // trade-offs:
+    //   - position:fixed+inset:0 directly on the clone (not a separate
+    //     wrapper) collapsed its own height to one viewport, clipping
+    //     it to the wrong slice of its own content.
+    //   - activeNode itself (the live, still-mounted outgoing slot)
+    //     staying in normal flow let it silently re-render to the new
+    //     route's content (the same context-propagation issue this
+    //     whole clone mechanism exists to route around) and change its
+    //     own real layout height, which shifted document scroll height
+    //     and let the browser auto-clamp window.scrollY out from under
+    //     a transform that assumed it wouldn't move. display:none was
+    //     tried and made it worse (drops flow contribution to zero
+    //     *before* the incoming-pane spacer grows to compensate).
+    //     Fixed by locking activeNode's own height explicitly the
+    //     instant it's cloned, below.
+    //   - The incoming-pane spacer (PageTransition's own trailing
+    //     return value) growing by a viewport to reserve its own room
+    //     pushes Footer/SiteNav down by that same amount without
+    //     scroll moving to compensate - fixed by a dedicated
+    //     scroll-compensation layout effect elsewhere in this file.
+    //   - A single blanket transform: translateY(-scrollY) on the
+    //     whole clone (the original alignment mechanism here) is the
+    //     wrong model for position:sticky content specifically - a
+    //     *stuck* sticky element doesn't move 1:1 with scroll, so
+    //     translating the entire clone by -scrollY yanked it away from
+    //     its correct frozen position (ApproachHero's sketch-to-photo
+    //     reveal - see that component's own doc comment on why it's
+    //     sticky, not ScrollTrigger's pin:true). Replaced with a real
+    //     scrollable container (scrollContainer below) whose actual
+    //     scrollTop is set to the original scrollY - the exact state
+    //     sticky is designed to resolve against, so the browser's own
+    //     sticky logic gets it right for free, for any sticky
+    //     descendant, with no manual math here at all. (overflow:hidden
+    //     directly on activeNode, from the height-lock fix above, had
+    //     the same disruptive effect on the *live* page's own sticky
+    //     sections - removed; the height lock alone is sufficient.)
+    //   - That real scrollTop then clamps to the clone's own content
+    //     height same as any scrollable element would - a user
+    //     scrolled far enough that Footer was already in view had
+    //     their scrollTop silently clamped back up. A transparent
+    //     padding element inside scrollContainer, sized to cover the
+    //     shortfall so the real Footer showed through its own
+    //     transparency, fixed this on desktop - but didn't hold up on
+    //     an actual iPhone (Footer disappeared behind a blank, opaque-
+    //     looking area instead, and separately, sticky content was
+    //     observed flashing between unstuck and stuck right as the
+    //     scrollTop below actually took effect) - both symptoms
+    //     consistent with iOS Safari's own scroll-compositing
+    //     behavior not reliably treating a freshly-scrolled container's
+    //     "beyond its content" region as transparent, nor applying a
+    //     scrollTop assignment on a freshly-inserted element
+    //     synchronously the way desktop engines do.
+    //
+    // Current design, replacing the padding-spacer approach: rather
+    // than ever asking any scrollable region to render transparently
+    // past its own content, clipWrapper's own height is capped to
+    // exactly how much of the *current* viewport the clone can
+    // actually cover (visibleCloneHeight below) - for the rest of the
+    // viewport, this mechanism doesn't paint anything at all, so the
+    // real Footer shows through by simple absence, the same way any
+    // element not covered by an overlay does, with no reliance on any
+    // browser's particular scroll-compositing/transparency behavior.
+    const visibleCloneHeight = Math.max(
+      0,
+      Math.min(window.innerHeight, activeHeight - window.scrollY),
+    );
+    const clipWrapper = document.createElement("div");
+    clipWrapper.style.position = "fixed";
+    clipWrapper.style.top = "0";
+    clipWrapper.style.left = "0";
+    clipWrapper.style.right = "0";
+    clipWrapper.style.height = `${visibleCloneHeight}px`;
+    // Clips scrollContainer's own scrollbar (deliberately made wider
+    // than this wrapper below) back down to the viewport's real width -
+    // this element's own overflow:hidden is purely a visual clip, not
+    // what scroll-related calculations below resolve against (that's
+    // scrollContainer, a separate, inner element).
+    clipWrapper.style.overflow = "hidden";
+    clipWrapper.style.zIndex = "5";
+    clipWrapper.style.pointerEvents = "none";
+
+    // getScrollbarWidth() (module scope, computed once and cached) -
+    // widening this by exactly the scrollbar's own width and letting
+    // clipWrapper's overflow:hidden above clip the excess is the
+    // standard technique for a scrollable container with no visible
+    // scrollbar, needed here since position:fixed+inset:0 alone
+    // (clipWrapper) doesn't scroll - it just defines the viewport-sized
+    // *visible* box. Zero-width on iOS/macOS's own overlay scrollbars,
+    // where this doesn't matter at all; real elsewhere.
+    const scrollContainer = document.createElement("div");
+    scrollContainer.style.width = `calc(100% + ${getScrollbarWidth()}px)`;
+    scrollContainer.style.height = "100%";
+    scrollContainer.style.overflowY = "scroll";
+    scrollContainer.style.overflowX = "hidden";
+    scrollContainer.style.pointerEvents = "none";
+    // Not load-bearing on modern engines (scrollTop assignment doesn't
+    // need it) but harmless and a standing iOS Safari recommendation
+    // for any genuinely scrollable element - kept as a defensive
+    // nudge toward whatever scroll-compositing path it considers most
+    // correct, given this exact element is where the "flash"
+    // behavior above was observed.
+    scrollContainer.style.setProperty(
+      "-webkit-overflow-scrolling",
+      "touch",
+    );
+
+    const clone = activeNode.cloneNode(true) as HTMLDivElement;
+    // Explicit, absolute width - scrollContainer's own box (immediately
+    // above) is deliberately wider than the real viewport to make room
+    // for its scrollbar, and a plain block child with no width of its
+    // own would inherit that same extra width via normal flow,
+    // stretching the cloned page's own content slightly wider than it
+    // actually rendered at. Pinning it to the real viewport width
+    // directly avoids that distortion regardless of scrollContainer's
+    // own padding-for-scrollbar width.
+    clone.style.margin = "0";
+    clone.style.width = `${window.innerWidth}px`;
+    // See freezeClonedImages's own doc comment (module scope, above)
+    // for why every image gets swapped for an already-painted canvas
+    // here rather than staying a cloned <img> left to decode on its
+    // own.
+    freezeClonedImages(activeNode, clone);
+    scrollContainer.appendChild(clone);
+    clipWrapper.appendChild(scrollContainer);
+
+    // See this block's own doc comment above (point 2) for why -
+    // activeNode's real content is already safely captured in clone
+    // above, so whatever it silently re-renders to from here no longer
+    // needs to be seen. display:none was the first thing tried here
+    // and made this specific repro worse, not better: it drops
+    // activeNode's contribution to document flow to zero *immediately*,
+    // before the spacer below has grown to compensate - and that
+    // spacer only ever reserves room for the *incoming* pane's own
+    // position:fixed (a flat one viewport), never for whatever
+    // activeNode itself used to occupy (2501px in this repro) - so
+    // display:none produced the exact same class of bug, just worse:
+    // document height collapsing to one viewport flat, clamping
+    // scrollY to 0 outright. Locking the height explicitly instead
+    // keeps activeNode's own contribution to document flow exactly
+    // what it already was at the moment of this click, permanently,
+    // regardless of whatever its content silently re-renders to later
+    // - nothing left to clamp scroll over. It doesn't need
+    // visibility:hidden on top - clone above is a same-position
+    // structural copy taken at this exact instant, already covering
+    // precisely this box for as long as both exist.
+    //
+    // No overflow:hidden alongside the height, deliberately - an
+    // earlier version of this added it too, to clip any visual bleed
+    // if contaminated content later rendered taller than this locked
+    // box. Confirmed live, on an actual iPhone: that broke every
+    // position:sticky section on the frozen outgoing page (e.g.
+    // ApproachHero's own sketch-to-photo reveal, see its own doc
+    // comment on why it's sticky rather than ScrollTrigger's pin:true
+    // in the first place) - sticky positioning resolves against the
+    // nearest ancestor that establishes a scroll container, which
+    // overflow:hidden does regardless of whether anything inside it
+    // can actually scroll. Turning activeNode itself into that
+    // ancestor, frozen with no real scroll happening inside it, read
+    // as the sticky section either snapping out of its stuck position
+    // or being clipped away entirely the instant a navigation started.
+    // The height lock alone is already sufficient for the actual bug
+    // this exists to fix (scroll auto-clamping off a changing document
+    // height) - overflow was only ever a defensive extra for a visual
+    // bleed scenario already covered by the clone sitting on top in
+    // every case checked live, not worth this regression to keep.
+    activeNode.style.height = `${activeHeight}px`;
+    // Read by the spacer-growth scroll-compensation layout effect
+    // below (see its own doc comment) - this is also, not
+    // coincidentally, exactly the document position the spacer is
+    // about to be inserted at, since the incoming pane contributes
+    // nothing to flow.
+    lockedOutgoingHeightRef.current = activeHeight;
+
+    // A plain sibling, not a child of clone and not baked into its own
+    // background - sits one z-index above it (6, still below the
+    // incoming pane's 10) so it darkens the *whole* clone uniformly
+    // regardless of what's inside it, rather than needing to reach
+    // into the clone's own markup. Faded in via GSAP rather than set
+    // once at full strength - an instant hard cut here read as exactly
+    // the "whole screen blacking out" effect this project's own
+    // history already rejected once (see pageOutgoingDarkenOpacity's
+    // doc comment in lib/motion.ts).
+    //
+    // Deliberately its own short duration/ease, not a match for the
+    // incoming pane's own pageSlideHoldDuration+pageSlideDuration
+    // timeline - the pane's own inOutQuart ramps up slowly by design
+    // (that's what reads as a deliberate, weighted rise rather than a
+    // twitch), but reusing that same slow-starting curve here left the
+    // darken sitting at an imperceptible ~0.3% opacity a third of the
+    // way into the transition, confirmed live via Playwright - exactly
+    // backwards from the point of it, which is to give the viewer
+    // *early* contrast that the outgoing page is the one leaving.
+    // outQuart (fast start, settles quickly) over a flat, short
+    // duration gets it to full strength while the incoming pane is
+    // still mostly offscreen, then just holds there for the remainder
+    // of the rise - the outgoing page doesn't need to keep darkening
+    // once it's already unambiguous which page is which.
+    const darken = document.createElement("div");
+    darken.style.position = "fixed";
+    darken.style.inset = "0";
+    darken.style.zIndex = "6";
+    darken.style.pointerEvents = "none";
+    darken.style.background = "#000";
+    darken.style.opacity = "0";
+    host.replaceChildren(clipWrapper, darken);
+    // Forces layout before the scrollTop assignment below - a browser
+    // doesn't necessarily know scrollContainer's own scrollable range
+    // yet at the instant it's inserted (that requires having laid out
+    // clone's real content height first), and a scrollTop assigned
+    // before that's settled can silently clamp to whatever the browser
+    // still thinks the range is (effectively 0) rather than erroring
+    // or deferring - this read forces that layout pass to happen
+    // synchronously, right here, before the assignment that depends on
+    // its result. Confirmed live only on an actual iPhone (not any
+    // desktop/headless engine, including Playwright's iPhone device
+    // profile): without this, a sticky section's own on-screen
+    // position flashed between its unstuck and correctly-stuck states
+    // for a frame - stuck briefly resolving against scrollTop still 0,
+    // then snapping once the real assignment actually took effect.
+    void scrollContainer.offsetHeight;
+    // This is what actually aligns scrollContainer's view with what
+    // was on screen (see its own doc comment above) - scroll is about
+    // to be locked for the rest of this transition anyway (both
+    // document.body's own overflow:hidden below and Lenis.stop() in
+    // the pathname effect), so this single assignment stays correctly
+    // aligned for as long as it's needed, with no scroll listener
+    // required.
+    scrollContainer.scrollTop = window.scrollY;
+    gsap.to(darken, {
+      opacity: pageOutgoingDarkenOpacity,
+      duration: pageSlideHoldDuration,
+      ease: ease.outQuart,
+    });
+  }
+
   useEffect(() => {
     function handleClick(event: MouseEvent) {
       if (event.defaultPrevented || event.button !== 0) return;
@@ -545,268 +853,10 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
 
       transitioningRef.current = true;
 
-      // Snapshot the currently-active (about-to-be-outgoing) pane's real
-      // DOM *before* calling push() below - see snapshotHostRef's own doc
-      // comment for why this has to be a static clone, not a live React
-      // subtree, and why it has to happen before navigating rather than
-      // after (once pathname has already changed, the live version this
-      // clones from may have already re-rendered to show the new route).
-      const activeId = activeIdRef.current;
-      const activeNode =
-        activeId !== undefined ? paneNodesRef.current.get(activeId) : null;
-      const host = snapshotHostRef.current;
-      if (activeNode && host) {
-        // Measured once, up front - reused below both to size
-        // scrollContainer's own padding (so its scrollable range covers
-        // the real scrollY even past the clone's own content) and to lock
-        // activeNode's own contribution to document flow (see that line's
-        // own doc comment further down) - a single source of truth rather
-        // than measuring the same box twice.
-        const activeHeight = activeNode.getBoundingClientRect().height;
-
-        // The snapshot mechanism went through several designs chasing bugs
-        // in this same family - scrolled-down-page repros showing the
-        // wrong content, or nothing, instead of what was actually on
-        // screen - each confirmed live via Playwright or, for three of
-        // them, only reproducible on an actual iPhone (desktop/headless
-        // engines, including Playwright's own iPhone device profile,
-        // missed all three - see [[feedback_real_device_testing_gap]] if
-        // that memory still exists). The abbreviated history, oldest
-        // first, in case a future bug traces back to one of these same
-        // trade-offs:
-        //   - position:fixed+inset:0 directly on the clone (not a separate
-        //     wrapper) collapsed its own height to one viewport, clipping
-        //     it to the wrong slice of its own content.
-        //   - activeNode itself (the live, still-mounted outgoing slot)
-        //     staying in normal flow let it silently re-render to the new
-        //     route's content (the same context-propagation issue this
-        //     whole clone mechanism exists to route around) and change its
-        //     own real layout height, which shifted document scroll height
-        //     and let the browser auto-clamp window.scrollY out from under
-        //     a transform that assumed it wouldn't move. display:none was
-        //     tried and made it worse (drops flow contribution to zero
-        //     *before* the incoming-pane spacer grows to compensate).
-        //     Fixed by locking activeNode's own height explicitly the
-        //     instant it's cloned, below.
-        //   - The incoming-pane spacer (PageTransition's own trailing
-        //     return value) growing by a viewport to reserve its own room
-        //     pushes Footer/SiteNav down by that same amount without
-        //     scroll moving to compensate - fixed by a dedicated
-        //     scroll-compensation layout effect elsewhere in this file.
-        //   - A single blanket transform: translateY(-scrollY) on the
-        //     whole clone (the original alignment mechanism here) is the
-        //     wrong model for position:sticky content specifically - a
-        //     *stuck* sticky element doesn't move 1:1 with scroll, so
-        //     translating the entire clone by -scrollY yanked it away from
-        //     its correct frozen position (ApproachHero's sketch-to-photo
-        //     reveal - see that component's own doc comment on why it's
-        //     sticky, not ScrollTrigger's pin:true). Replaced with a real
-        //     scrollable container (scrollContainer below) whose actual
-        //     scrollTop is set to the original scrollY - the exact state
-        //     sticky is designed to resolve against, so the browser's own
-        //     sticky logic gets it right for free, for any sticky
-        //     descendant, with no manual math here at all. (overflow:hidden
-        //     directly on activeNode, from the height-lock fix above, had
-        //     the same disruptive effect on the *live* page's own sticky
-        //     sections - removed; the height lock alone is sufficient.)
-        //   - That real scrollTop then clamps to the clone's own content
-        //     height same as any scrollable element would - a user
-        //     scrolled far enough that Footer was already in view had
-        //     their scrollTop silently clamped back up. A transparent
-        //     padding element inside scrollContainer, sized to cover the
-        //     shortfall so the real Footer showed through its own
-        //     transparency, fixed this on desktop - but didn't hold up on
-        //     an actual iPhone (Footer disappeared behind a blank, opaque-
-        //     looking area instead, and separately, sticky content was
-        //     observed flashing between unstuck and stuck right as the
-        //     scrollTop below actually took effect) - both symptoms
-        //     consistent with iOS Safari's own scroll-compositing
-        //     behavior not reliably treating a freshly-scrolled container's
-        //     "beyond its content" region as transparent, nor applying a
-        //     scrollTop assignment on a freshly-inserted element
-        //     synchronously the way desktop engines do.
-        //
-        // Current design, replacing the padding-spacer approach: rather
-        // than ever asking any scrollable region to render transparently
-        // past its own content, clipWrapper's own height is capped to
-        // exactly how much of the *current* viewport the clone can
-        // actually cover (visibleCloneHeight below) - for the rest of the
-        // viewport, this mechanism doesn't paint anything at all, so the
-        // real Footer shows through by simple absence, the same way any
-        // element not covered by an overlay does, with no reliance on any
-        // browser's particular scroll-compositing/transparency behavior.
-        const visibleCloneHeight = Math.max(
-          0,
-          Math.min(window.innerHeight, activeHeight - window.scrollY),
-        );
-        const clipWrapper = document.createElement("div");
-        clipWrapper.style.position = "fixed";
-        clipWrapper.style.top = "0";
-        clipWrapper.style.left = "0";
-        clipWrapper.style.right = "0";
-        clipWrapper.style.height = `${visibleCloneHeight}px`;
-        // Clips scrollContainer's own scrollbar (deliberately made wider
-        // than this wrapper below) back down to the viewport's real width -
-        // this element's own overflow:hidden is purely a visual clip, not
-        // what scroll-related calculations below resolve against (that's
-        // scrollContainer, a separate, inner element).
-        clipWrapper.style.overflow = "hidden";
-        clipWrapper.style.zIndex = "5";
-        clipWrapper.style.pointerEvents = "none";
-
-        // getScrollbarWidth() (module scope, computed once and cached) -
-        // widening this by exactly the scrollbar's own width and letting
-        // clipWrapper's overflow:hidden above clip the excess is the
-        // standard technique for a scrollable container with no visible
-        // scrollbar, needed here since position:fixed+inset:0 alone
-        // (clipWrapper) doesn't scroll - it just defines the viewport-sized
-        // *visible* box. Zero-width on iOS/macOS's own overlay scrollbars,
-        // where this doesn't matter at all; real elsewhere.
-        const scrollContainer = document.createElement("div");
-        scrollContainer.style.width = `calc(100% + ${getScrollbarWidth()}px)`;
-        scrollContainer.style.height = "100%";
-        scrollContainer.style.overflowY = "scroll";
-        scrollContainer.style.overflowX = "hidden";
-        scrollContainer.style.pointerEvents = "none";
-        // Not load-bearing on modern engines (scrollTop assignment doesn't
-        // need it) but harmless and a standing iOS Safari recommendation
-        // for any genuinely scrollable element - kept as a defensive
-        // nudge toward whatever scroll-compositing path it considers most
-        // correct, given this exact element is where the "flash"
-        // behavior above was observed.
-        scrollContainer.style.setProperty(
-          "-webkit-overflow-scrolling",
-          "touch",
-        );
-
-        const clone = activeNode.cloneNode(true) as HTMLDivElement;
-        // Explicit, absolute width - scrollContainer's own box (immediately
-        // above) is deliberately wider than the real viewport to make room
-        // for its scrollbar, and a plain block child with no width of its
-        // own would inherit that same extra width via normal flow,
-        // stretching the cloned page's own content slightly wider than it
-        // actually rendered at. Pinning it to the real viewport width
-        // directly avoids that distortion regardless of scrollContainer's
-        // own padding-for-scrollbar width.
-        clone.style.margin = "0";
-        clone.style.width = `${window.innerWidth}px`;
-        // See freezeClonedImages's own doc comment (module scope, above)
-        // for why every image gets swapped for an already-painted canvas
-        // here rather than staying a cloned <img> left to decode on its
-        // own.
-        freezeClonedImages(activeNode, clone);
-        scrollContainer.appendChild(clone);
-        clipWrapper.appendChild(scrollContainer);
-
-        // See this block's own doc comment above (point 2) for why -
-        // activeNode's real content is already safely captured in clone
-        // above, so whatever it silently re-renders to from here no longer
-        // needs to be seen. display:none was the first thing tried here
-        // and made this specific repro worse, not better: it drops
-        // activeNode's contribution to document flow to zero *immediately*,
-        // before the spacer below has grown to compensate - and that
-        // spacer only ever reserves room for the *incoming* pane's own
-        // position:fixed (a flat one viewport), never for whatever
-        // activeNode itself used to occupy (2501px in this repro) - so
-        // display:none produced the exact same class of bug, just worse:
-        // document height collapsing to one viewport flat, clamping
-        // scrollY to 0 outright. Locking the height explicitly instead
-        // keeps activeNode's own contribution to document flow exactly
-        // what it already was at the moment of this click, permanently,
-        // regardless of whatever its content silently re-renders to later
-        // - nothing left to clamp scroll over. It doesn't need
-        // visibility:hidden on top - clone above is a same-position
-        // structural copy taken at this exact instant, already covering
-        // precisely this box for as long as both exist.
-        //
-        // No overflow:hidden alongside the height, deliberately - an
-        // earlier version of this added it too, to clip any visual bleed
-        // if contaminated content later rendered taller than this locked
-        // box. Confirmed live, on an actual iPhone: that broke every
-        // position:sticky section on the frozen outgoing page (e.g.
-        // ApproachHero's own sketch-to-photo reveal, see its own doc
-        // comment on why it's sticky rather than ScrollTrigger's pin:true
-        // in the first place) - sticky positioning resolves against the
-        // nearest ancestor that establishes a scroll container, which
-        // overflow:hidden does regardless of whether anything inside it
-        // can actually scroll. Turning activeNode itself into that
-        // ancestor, frozen with no real scroll happening inside it, read
-        // as the sticky section either snapping out of its stuck position
-        // or being clipped away entirely the instant a navigation started.
-        // The height lock alone is already sufficient for the actual bug
-        // this exists to fix (scroll auto-clamping off a changing document
-        // height) - overflow was only ever a defensive extra for a visual
-        // bleed scenario already covered by the clone sitting on top in
-        // every case checked live, not worth this regression to keep.
-        activeNode.style.height = `${activeHeight}px`;
-        // Read by the spacer-growth scroll-compensation layout effect
-        // below (see its own doc comment) - this is also, not
-        // coincidentally, exactly the document position the spacer is
-        // about to be inserted at, since the incoming pane contributes
-        // nothing to flow.
-        lockedOutgoingHeightRef.current = activeHeight;
-
-        // A plain sibling, not a child of clone and not baked into its own
-        // background - sits one z-index above it (6, still below the
-        // incoming pane's 10) so it darkens the *whole* clone uniformly
-        // regardless of what's inside it, rather than needing to reach
-        // into the clone's own markup. Faded in via GSAP rather than set
-        // once at full strength - an instant hard cut here read as exactly
-        // the "whole screen blacking out" effect this project's own
-        // history already rejected once (see pageOutgoingDarkenOpacity's
-        // doc comment in lib/motion.ts).
-        //
-        // Deliberately its own short duration/ease, not a match for the
-        // incoming pane's own pageSlideHoldDuration+pageSlideDuration
-        // timeline - the pane's own inOutQuart ramps up slowly by design
-        // (that's what reads as a deliberate, weighted rise rather than a
-        // twitch), but reusing that same slow-starting curve here left the
-        // darken sitting at an imperceptible ~0.3% opacity a third of the
-        // way into the transition, confirmed live via Playwright - exactly
-        // backwards from the point of it, which is to give the viewer
-        // *early* contrast that the outgoing page is the one leaving.
-        // outQuart (fast start, settles quickly) over a flat, short
-        // duration gets it to full strength while the incoming pane is
-        // still mostly offscreen, then just holds there for the remainder
-        // of the rise - the outgoing page doesn't need to keep darkening
-        // once it's already unambiguous which page is which.
-        const darken = document.createElement("div");
-        darken.style.position = "fixed";
-        darken.style.inset = "0";
-        darken.style.zIndex = "6";
-        darken.style.pointerEvents = "none";
-        darken.style.background = "#000";
-        darken.style.opacity = "0";
-        host.replaceChildren(clipWrapper, darken);
-        // Forces layout before the scrollTop assignment below - a browser
-        // doesn't necessarily know scrollContainer's own scrollable range
-        // yet at the instant it's inserted (that requires having laid out
-        // clone's real content height first), and a scrollTop assigned
-        // before that's settled can silently clamp to whatever the browser
-        // still thinks the range is (effectively 0) rather than erroring
-        // or deferring - this read forces that layout pass to happen
-        // synchronously, right here, before the assignment that depends on
-        // its result. Confirmed live only on an actual iPhone (not any
-        // desktop/headless engine, including Playwright's iPhone device
-        // profile): without this, a sticky section's own on-screen
-        // position flashed between its unstuck and correctly-stuck states
-        // for a frame - stuck briefly resolving against scrollTop still 0,
-        // then snapping once the real assignment actually took effect.
-        void scrollContainer.offsetHeight;
-        // This is what actually aligns scrollContainer's view with what
-        // was on screen (see its own doc comment above) - scroll is about
-        // to be locked for the rest of this transition anyway (both
-        // document.body's own overflow:hidden below and Lenis.stop() in
-        // the pathname effect), so this single assignment stays correctly
-        // aligned for as long as it's needed, with no scroll listener
-        // required.
-        scrollContainer.scrollTop = window.scrollY;
-        gsap.to(darken, {
-          opacity: pageOutgoingDarkenOpacity,
-          duration: pageSlideHoldDuration,
-          ease: ease.outQuart,
-        });
-      }
+      // See snapshotOutgoingPage's own doc comment (above, before this
+      // effect) for what this does and why it's shared with the
+      // popstate listener further down.
+      snapshotOutgoingPage();
 
       // Lets SiteNav close its mobile menu immediately, un-animated, if it
       // happens to be open right now - see pageTransitionState.onNavigate's
@@ -837,6 +887,50 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     // routerRef's own doc comment above.
     document.addEventListener("click", handleClick, true);
     return () => document.removeEventListener("click", handleClick, true);
+  }, []);
+
+  // Gives browser back/forward the exact same treatment as a real link
+  // click above - see snapshotOutgoingPage's own doc comment for the bug
+  // this fixes. popstate fires on window, not document (unlike click,
+  // which this project deliberately listens for on document to catch
+  // every link regardless of where in the tree it lives) - it isn't a
+  // delegatable DOM event the way click is, there's exactly one to listen
+  // for per navigation, dispatched directly on window.
+  //
+  // No router.push here, deliberately - unlike handleClick, which is
+  // intercepting a click *before* any navigation has happened and has to
+  // trigger one itself, popstate fires *after* the browser has already
+  // traversed history and changed the URL. Next's own router has its own
+  // independent popstate handling (wired up elsewhere, outside this
+  // component entirely) that picks up the new pathname on its own from
+  // here - this listener's only job is making sure the outgoing page gets
+  // cloned/frozen/darkened first, before that happens, same as a click
+  // would have. Can't preventDefault or otherwise delay/cancel a popstate
+  // the way handleClick can a click - the history traversal this reacts to
+  // has already happened by the time this fires, synchronously, as part of
+  // the same browser operation. Running snapshotOutgoingPage() synchronously
+  // inside this handler is still enough to win the race, though: Next's own
+  // route-change commit (the thing this whole mechanism exists to get
+  // ahead of) happens via a React state update, which can only flush on a
+  // later tick than this event handler - this is the exact same ordering
+  // handleClick already relies on between taking the snapshot and
+  // router.push() causing a commit, just with the navigation itself
+  // already unavoidably underway rather than yet to be triggered.
+  //
+  // transitioningRef's own guard is skipped if a real link click (or
+  // another popstate) already started a transition in flight - there's no
+  // way to cancel the browser's own history traversal at this point
+  // either way, so the best this can do is avoid stacking a second,
+  // conflicting snapshot/darken sequence on top of one already running.
+  useEffect(() => {
+    function handlePopState() {
+      if (transitioningRef.current) return;
+      transitioningRef.current = true;
+      snapshotOutgoingPage();
+      pageTransitionState.onNavigate?.();
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   // useCallback, not a plain function - it's a dependency of TransitionPane's

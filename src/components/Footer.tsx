@@ -67,6 +67,17 @@ export function Footer() {
   const pendingRef = useRef<"A" | "B" | null>(null);
   const currentSrcRef = useRef(initialImage.src);
   const lastPathnameRef = useRef(pathname);
+  // The in-flight gsap.delayedCall scheduled by handleLoadA/handleLoadB
+  // below (see their own doc comment for why it's delayed at all), killed
+  // and replaced on every new navigation - see the pathname effect's own
+  // doc comment for the exact race this prevents: without it, navigating
+  // away again before a scheduled crossfade actually fires left that stale
+  // call free to run later and flip this footer's visible layer to
+  // whatever image happened to be loaded on it at that later moment, not
+  // necessarily the current route's - confirmed live, toggling quickly
+  // between /approach and /services, as the footer's backdrop showing the
+  // wrong page's photo.
+  const pendingTweenRef = useRef<gsap.core.Tween | null>(null);
 
   // Backdrop parallax, the same technique and swing as Hero.tsx's own (see
   // that file's doc comment for the overhang math): the wrapper is 150% of
@@ -129,6 +140,20 @@ export function Footer() {
     const next = footerImageFor(pathname);
     if (next.src === currentSrcRef.current) return;
     currentSrcRef.current = next.src;
+    // Cancels a crossfade still scheduled from a previous, now-superseded
+    // navigation - see pendingTweenRef's own doc comment above for the
+    // exact bug this prevents. Without this, navigating away again (even
+    // back to the route this footer had been showing before) while an
+    // earlier crossfade was still waiting out its own delayedCall left
+    // that stale call free to fire later regardless, flipping this
+    // footer's visible layer to whatever `src` that layer's <img>
+    // happened to have at that point - which, since frontRef doesn't
+    // update until a crossfade actually *runs*, consecutive rapid
+    // navigations always target the same hidden layer, repeatedly
+    // overwriting its `src` out from under an earlier, still-pending
+    // crossfade meant for a different route entirely.
+    pendingTweenRef.current?.kill();
+    pendingTweenRef.current = null;
     const back = frontRef.current === "A" ? "B" : "A";
     pendingRef.current = back;
     (back === "A" ? setImageA : setImageB)(next);
@@ -164,17 +189,26 @@ export function Footer() {
   function handleLoadA() {
     if (pendingRef.current !== "A") return;
     pendingRef.current = null;
-    gsap.delayedCall(
+    // Stored in pendingTweenRef so the pathname effect above can kill this
+    // exact call if another navigation arrives before it fires - see that
+    // ref's own doc comment.
+    pendingTweenRef.current = gsap.delayedCall(
       pageTransitionSettleDuration,
-      contextSafe(() => runCrossfade("A")),
+      contextSafe(() => {
+        pendingTweenRef.current = null;
+        runCrossfade("A");
+      }),
     );
   }
   function handleLoadB() {
     if (pendingRef.current !== "B") return;
     pendingRef.current = null;
-    gsap.delayedCall(
+    pendingTweenRef.current = gsap.delayedCall(
       pageTransitionSettleDuration,
-      contextSafe(() => runCrossfade("B")),
+      contextSafe(() => {
+        pendingTweenRef.current = null;
+        runCrossfade("B");
+      }),
     );
   }
 
