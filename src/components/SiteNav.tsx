@@ -213,22 +213,43 @@ export function SiteNav() {
         lenisRef?.current?.stop();
         document.body.style.overflow = "hidden";
       }
+    } else if (navigatingRef.current) {
+      // Closing because we navigated, not because the user backed out -
+      // PageTransition owns this exact lock, start to finish, for this
+      // pathname change: it applies it synchronously on the very same
+      // click (see snapshotOutgoingPage's own doc comment) and releases
+      // it once settled. Touching document.body.style.overflow here at
+      // all - even just resetting it to "" - clobbers that lock right
+      // back off, moments after PageTransition applied it, for however
+      // long it then takes the route to actually commit: confirmed live,
+      // on an actual iPhone, scrolled into the footer (auto-opening this
+      // exact menu) and tapping a link in it - the live, "frozen" outgoing
+      // page's own DOM (already silently re-rendered to the new route,
+      // a separate known quirk - see PageTransition's own doc comment)
+      // was free to scroll back into view through the resulting unlocked
+      // gap, showing the destination page's content before the transition
+      // itself had even started. Calling lenis.start() here would be the
+      // same mistake for the exact same reason (reopening the stopped gate
+      // while PageTransition's own hold loop is still trying to keep
+      // scroll at 0) - this skips both entirely now, not just the latter.
+      navigatingRef.current = false;
+      openedByBottomRef.current = false;
     } else {
       document.body.style.overflow = "";
-      if (navigatingRef.current) {
-        // Closing because we navigated, not because the user backed out -
-        // PageTransition owns resuming Lenis itself for this pathname
-        // change (see the doc comment on its own hold loop). Calling
-        // start() here too would reopen the stopped gate on wheel/touch
-        // input while that loop is still trying to hold scroll at 0.
-        navigatingRef.current = false;
-      } else if (!openedByBottomRef.current) {
+      if (!openedByBottomRef.current) {
         lenisRef?.current?.start();
       }
       openedByBottomRef.current = false;
     }
     return () => {
-      document.body.style.overflow = "";
+      // Same reasoning as the navigatingRef branch above - this cleanup
+      // runs on every dep change, including the one firing right as that
+      // branch's own check does (cleanup-before-setup, same commit), so it
+      // needs the identical guard or it clobbers the lock a half-tick
+      // earlier than the body above even gets a chance to.
+      if (!navigatingRef.current) {
+        document.body.style.overflow = "";
+      }
     };
   }, [open, lenisRef]);
 
