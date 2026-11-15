@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { Link } from "next-view-transitions";
 import { usePathname } from "next/navigation";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
@@ -40,15 +40,10 @@ export function SiteNav() {
   const labelRef = useRef<HTMLSpanElement>(null);
   const burgerLinesRef = useRef<HTMLSpanElement>(null);
   const skipCloseAnimRef = useRef(false);
-  // Set by the pageTransitionState.onNavigate registration below, read and
-  // cleared only by the scroll-lock effect further down - a dedicated ref
-  // rather than reusing skipCloseAnimRef, which the pill-collapse useGSAP
-  // effect above also reads and clears on the same `open` transition before
-  // this plain useEffect gets to it.
-  const navigatingRef = useRef(false);
-  // Also set by that same registration, also a dedicated ref rather than
-  // reusing skipCloseAnimRef for the exact same reason as navigatingRef above -
-  // read and cleared only by MenuOverlay's own focus-management effect.
+  // Set by that same registration, a dedicated ref rather than reusing
+  // skipCloseAnimRef for the exact same reason skipCloseAnimRef itself is
+  // separate from the pill-collapse useGSAP effect's own ref above - read
+  // and cleared only by MenuOverlay's own focus-management effect.
   // Tells that effect to skip returning focus to this button when the
   // menu is closing because a link was actually clicked: the user is
   // leaving this page entirely via PageTransition, not dismissing a
@@ -100,7 +95,6 @@ export function SiteNav() {
     pageTransitionState.onNavigate = () => {
       if (!openRef.current) return;
       skipCloseAnimRef.current = true;
-      navigatingRef.current = true;
       skipReturnFocusRef.current = true;
       setOpen(false);
     };
@@ -207,33 +201,21 @@ export function SiteNav() {
   // the page (openedByBottomRef) - that's not a modal takeover the way a
   // manually-opened menu is, and the user still needs to be able to scroll
   // back up to close it again (which the atBottom effect above depends on).
+  //
+  // Closing because of a real navigation used to need a separate branch
+  // here that deliberately skipped touching overflow/Lenis at all -
+  // PageTransition's own hand-rolled scroll lock owned that same gate for
+  // the rest of the transition, and resetting it here first would have
+  // clobbered that lock back off underneath it. That lock doesn't exist
+  // anymore - the View Transitions API (see PageTransition.tsx's own doc
+  // comment) needs no scroll lock at all, so a navigating close is no
+  // different from any other close now: reset it the same way.
   useEffect(() => {
     if (open) {
       if (!openedByBottomRef.current) {
         lenisRef?.current?.stop();
         document.body.style.overflow = "hidden";
       }
-    } else if (navigatingRef.current) {
-      // Closing because we navigated, not because the user backed out -
-      // PageTransition owns this exact lock, start to finish, for this
-      // pathname change: it applies it synchronously on the very same
-      // click (see snapshotOutgoingPage's own doc comment) and releases
-      // it once settled. Touching document.body.style.overflow here at
-      // all - even just resetting it to "" - clobbers that lock right
-      // back off, moments after PageTransition applied it, for however
-      // long it then takes the route to actually commit: confirmed live,
-      // on an actual iPhone, scrolled into the footer (auto-opening this
-      // exact menu) and tapping a link in it - the live, "frozen" outgoing
-      // page's own DOM (already silently re-rendered to the new route,
-      // a separate known quirk - see PageTransition's own doc comment)
-      // was free to scroll back into view through the resulting unlocked
-      // gap, showing the destination page's content before the transition
-      // itself had even started. Calling lenis.start() here would be the
-      // same mistake for the exact same reason (reopening the stopped gate
-      // while PageTransition's own hold loop is still trying to keep
-      // scroll at 0) - this skips both entirely now, not just the latter.
-      navigatingRef.current = false;
-      openedByBottomRef.current = false;
     } else {
       document.body.style.overflow = "";
       if (!openedByBottomRef.current) {
@@ -242,14 +224,7 @@ export function SiteNav() {
       openedByBottomRef.current = false;
     }
     return () => {
-      // Same reasoning as the navigatingRef branch above - this cleanup
-      // runs on every dep change, including the one firing right as that
-      // branch's own check does (cleanup-before-setup, same commit), so it
-      // needs the identical guard or it clobbers the lock a half-tick
-      // earlier than the body above even gets a chance to.
-      if (!navigatingRef.current) {
-        document.body.style.overflow = "";
-      }
+      document.body.style.overflow = "";
     };
   }, [open, lenisRef]);
 
@@ -586,7 +561,12 @@ export function SiteNav() {
         // invisible the rest of the time is handled by opacity, not z-index
         // (opacity-0 below, until the entrance timeline sets it to 1), so
         // sitting above everything at rest the whole session is harmless.
-        className="fixed bottom-10 left-1/2 z-[110] -translate-x-1/2 opacity-0"
+        // site-nav-pill: pulls this out of the View Transition's default
+        // root snapshot group (globals.css) - a persistent, always-fixed
+        // piece of chrome has to stay perfectly static through a
+        // navigation's crossfade, never duplicated/transformed along with
+        // the page content rising underneath it.
+        className="site-nav-pill fixed bottom-10 left-1/2 z-[110] -translate-x-1/2 opacity-0"
       >
         <div
           ref={pillRef}

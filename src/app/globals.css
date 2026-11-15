@@ -86,3 +86,168 @@ body {
 html.lenis.lenis-stopped:not(.lenis-autoToggle) {
   overflow: visible;
 }
+
+/* ============================================================
+   Page transition - View Transitions API
+   ============================================================
+   next-view-transitions (see <ViewTransitions> in layout.tsx) wraps every
+   real navigation (link clicks and browser back/forward alike) in
+   document.startViewTransition() - the browser snapshots the page as a real
+   bitmap before the DOM mutates and again after, so there is no live DOM to
+   clone, no <img> to freeze, no scroll position to lock/measure by hand the
+   way PageTransition.tsx's previous architecture had to (see that file's
+   own doc comment for the bug history that drove this rewrite). This is the
+   purely visual half of that: fluid.glass's rising pane for the incoming
+   page, and a matching darken on the outgoing one - literal numbers kept in
+   sync with src/lib/motion.ts by hand (pageSlideDuration,
+   pageSlideHoldDuration, pageSlideScaleFrom, pageOutgoingDarkenOpacity) -
+   CSS can't import a JS module, so if those ever change, change these too. */
+
+/* The per-route content wrapper (PageTransition.tsx) - the only element
+   that actually rises. Its captured snapshot is the *whole* route's
+   rendered height, not just the current viewport slice (per the View
+   Transitions spec, an element's image is its own full paint, not clipped
+   to what's currently scrolled into view) - transform-origin: top anchors
+   the scale/translate math at the element's own top edge specifically so
+   the part that's actually visible (always just below the viewport's own
+   top edge while this rises into frame) behaves identically regardless of
+   how tall any given route's full content happens to be. Confirmed live:
+   anchoring at the default center instead made the rise distance and scale
+   read differently per route depending on each page's own total height. */
+.page-transition-content {
+  view-transition-name: page-content;
+  transform-origin: top;
+}
+
+/* SiteNav's pill must stay perfectly static through every transition - a
+   persistent, always-fixed piece of chrome, not page content. Pulling it
+   into its own named group (see its own site-nav-pill class in
+   SiteNav.tsx) is what keeps it out of the root group below, which
+   otherwise captures the entire remaining viewport as a single image and
+   would carry this along with whatever transform/animation applies there. */
+.site-nav-pill {
+  view-transition-name: site-nav;
+}
+
+::view-transition-group(site-nav),
+::view-transition-image-pair(site-nav),
+::view-transition-old(site-nav),
+::view-transition-new(site-nav) {
+  animation: none;
+}
+
+/* Footer - its own stable group, not left in the default "root" one below.
+   Root spans the *entire* document, which has a different total height on
+   every route; disabling root's own group animation stops it visibly
+   morphing between those two sizes over time, but not the old/new
+   *images* themselves being sized to their own route's mismatched
+   dimensions within that shared box - confirmed live, the symptom was
+   Footer's own dark backdrop going fully blank for a couple of frames
+   mid-transition, every time, while scrolled down into it. Footer's own
+   box size is stable across every route (same markup, only its internal
+   backdrop-photo crossfade differs - see Footer.tsx's own
+   handleLoadA/handleLoadB), so its own named group never has that
+   mismatch to begin with. */
+.footer-transition-group {
+  view-transition-name: footer;
+}
+
+::view-transition-group(footer),
+::view-transition-image-pair(footer),
+::view-transition-old(footer),
+::view-transition-new(footer) {
+  animation: none;
+}
+
+/* Root = whatever's left (mainly <body>'s own plain background - uniform
+   across every route, nothing visible left in this group to glitch).
+   Known gap, not fixed here: navigating from deep in a long page's scroll
+   (e.g. the bottom-auto-opened mobile menu) shows a brief (~pageSlideHold
+   Duration-long) plain cream beat before the incoming pane rises - Next
+   resets scroll to 0 as part of committing the new route, before this
+   transition's hold/rise even starts, and the live page-content element is
+   hidden from normal rendering for the duration of the transition (the
+   standard View Transitions behavior for any named participant - only its
+   ::view-transition-new(page-content) image is supposed to be visible,
+   and that's deliberately held off-screen for this same window, see
+   page-content-rise below), so there's nothing in that specific region to
+   paint at all until the hold ends. Tried and reverted: animating
+   ::view-transition-new(root)'s own filter to fake a black beat there -
+   had no visible effect, because root's own captured image doesn't cover
+   that region to begin with (nothing distinct belongs to the "root" group
+   at the top of a freshly-committed page) - confirmed live. A real fix
+   needs a plain, non-pseudo-element overlay toggled by JS in sync with
+   document.startViewTransition()'s own lifecycle, not CSS on the pseudo-
+   tree alone. Left as a known, narrow, purely cosmetic trade-off - every
+   top-of-page navigation (the common case) is unaffected, and this is a
+   different class of issue entirely from the scroll-corruption bug this
+   whole rewrite exists to eliminate (see PageTransition.tsx's own doc
+   comment). */
+::view-transition-group(root),
+::view-transition-image-pair(root),
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* The group's own default animation interpolates a shared box between the
+   old and new element's geometry - page-content occupies the same
+   full-viewport-width box on both sides of every navigation, nothing to
+   morph, and the old/new images are meant to be independently layered
+   (new rising over old) rather than reconciled into one. */
+::view-transition-group(page-content) {
+  animation: none;
+}
+
+::view-transition-image-pair(page-content) {
+  isolation: auto;
+}
+
+::view-transition-old(page-content) {
+  transform-origin: top;
+  /* Stays fully visible and in place for the entire transition - the
+     darken below is what reads as it receding, not an opacity fade. An
+     opacity fade on an already-light page reads as the page itself
+     disappearing, not a pane covering it - the exact effect this
+     project's own history already rejected once (see pageSlideDuration's
+     doc comment in src/lib/motion.ts). */
+  animation: page-content-darken 0.35s var(--ease-out-quart) both;
+  mix-blend-mode: normal;
+}
+
+::view-transition-new(page-content) {
+  transform-origin: top;
+  animation: page-content-rise 1.25s var(--ease-in-out-quart) 0.35s both;
+  mix-blend-mode: normal;
+}
+
+@keyframes page-content-rise {
+  from {
+    transform: translateY(100vh) scale(0.8);
+  }
+  to {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes page-content-darken {
+  from {
+    filter: brightness(1);
+  }
+  to {
+    /* Approximates pageOutgoingDarkenOpacity (0.55, src/lib/motion.ts) as a
+       brightness multiplier - a real black overlay isn't available here
+       (::view-transition-old(x) is one flattened image, not a box further
+       overlays can stack on top of like the old clone-based darken div
+       could), but a multiply-style darken reads the same way visually. */
+    filter: brightness(0.45);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(page-content),
+  ::view-transition-new(page-content) {
+    animation: none;
+  }
+}
