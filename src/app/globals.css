@@ -24,6 +24,28 @@
   --font-mono: var(--font-geist-mono);
 }
 
+/* Explicit on html itself, not just body below - a documented Safari/
+   WebKit quirk with the View Transitions API: for the first frame or two
+   after document.startViewTransition() inserts its pseudo-element tree,
+   before the captured snapshot bitmap is actually ready to composite,
+   Safari can briefly show whatever's behind it - the plain browser canvas
+   color, which is white if nothing on the document root itself says
+   otherwise, regardless of what body's own background is set to. Reported
+   live as "a quick white flash" specifically scrolled into Footer and
+   navigating (Footer's own background is black, making a white flash read
+   as a visible glitch rather than blending in) - not reproduced in
+   Playwright, including WebKit, matching this project's established
+   pattern of real-device-only rendering quirks (see
+   [[feedback_real_device_testing_gap]]). Cheap, standard, safe mitigation:
+   give the root element itself the same color, so there's nothing left
+   for that gap to expose.
+   See globals.css's own page-transition block comment below, and
+   PageTransition.tsx's doc comment, for the system this backdrop is for.
+*/
+html {
+  background: var(--background);
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
@@ -85,6 +107,18 @@ body {
    regardless of which stylesheet the bundler orders first. */
 html.lenis.lenis-stopped:not(.lenis-autoToggle) {
   overflow: visible;
+}
+
+/* Same reasoning as the html { background } rule above (see its own doc
+   comment) - this is the other layer that same white-flash gap could show
+   through: ::view-transition is the root of the whole pseudo-element tree
+   View Transitions inserts, sitting behind every ::view-transition-group.
+   If root's own captured snapshot isn't composited yet for a frame,
+   *this* background is what shows instead of the browser's default white
+   canvas. Matches the page's own background, not black - this is a plain
+   fallback for an unintentional gap, not a deliberate darken effect. */
+::view-transition {
+  background-color: var(--background);
 }
 
 /* ============================================================
