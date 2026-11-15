@@ -196,6 +196,23 @@ html.lenis.lenis-stopped:not(.lenis-autoToggle) {
 
 ::view-transition-new(root) {
   transform-origin: top;
+  /* Static baseline matching the rise keyframe's own "from" state below -
+     deliberately not relying on animation-delay + fill-mode: both alone to
+     establish this. Per spec those should make this element render at its
+     "from" keyframe value for the entire delay, but a freshly-inserted
+     pseudo-element can paint once at its plain, untransformed position
+     before a delayed animation's backwards-fill actually takes effect -
+     a real, documented class of engine timing gap, not a spec violation
+     each engine handles identically. Since ::view-transition-new paints
+     on top of ::view-transition-old by default, that one naked frame
+     would show the incoming page's own (undecoded-image, often near-
+     white) snapshot covering the whole screen - reported live as "a
+     quick white flash that covers the outgoing screen, then instantly
+     disappears." This plain, non-animated transform is this element's
+     position from the very first style calculation, independent of
+     whether the animation has started applying yet - nothing for that
+     gap to expose. */
+  transform: translateY(100vh) scale(0.8);
   animation: page-content-rise 1.25s var(--ease-in-out-quart) 0.35s both;
   mix-blend-mode: normal;
 }
