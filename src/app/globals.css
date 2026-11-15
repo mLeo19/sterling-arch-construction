@@ -131,11 +131,14 @@ html.lenis.lenis-stopped:not(.lenis-autoToggle) {
    clone, no <img> to freeze, no scroll position to lock/measure by hand the
    way PageTransition.tsx's previous architecture had to (see that file's
    own doc comment for the bug history that drove this rewrite). This is the
-   purely visual half of that: fluid.glass's rising pane for the incoming
-   page, and a matching darken on the outgoing one - literal numbers kept in
-   sync with src/lib/motion.ts by hand (pageSlideDuration,
-   pageSlideHoldDuration, pageSlideScaleFrom, pageOutgoingDarkenOpacity) -
-   CSS can't import a JS module, so if those ever change, change these too. */
+   purely visual half of that: the incoming page reveals through a growing
+   window-pane-shaped mask instead of a plain rectangular crossfade, with a
+   matching darken on the outgoing one underneath. Duration/delay numbers
+   kept in sync with src/lib/motion.ts by hand (pageSlideDuration,
+   pageSlideHoldDuration, pageOutgoingDarkenOpacity) - CSS can't import a JS
+   module, so if those ever change, change these too. (pageSlideScaleFrom
+   doesn't apply here anymore - see ::view-transition-new(root) below for
+   why the mask shape needs no scale/transform baseline at all.) */
 
 /* Everything drives off the default, UNNAMED "root" transition - PageTransition.tsx's
    per-route content wrapper deliberately has NO view-transition-name of its
@@ -195,34 +198,48 @@ html.lenis.lenis-stopped:not(.lenis-autoToggle) {
 }
 
 ::view-transition-new(root) {
-  transform-origin: top;
-  /* Static baseline matching the rise keyframe's own "from" state below -
-     deliberately not relying on animation-delay + fill-mode: both alone to
-     establish this. Per spec those should make this element render at its
-     "from" keyframe value for the entire delay, but a freshly-inserted
-     pseudo-element can paint once at its plain, untransformed position
-     before a delayed animation's backwards-fill actually takes effect -
-     a real, documented class of engine timing gap, not a spec violation
-     each engine handles identically. Since ::view-transition-new paints
-     on top of ::view-transition-old by default, that one naked frame
-     would show the incoming page's own (undecoded-image, often near-
-     white) snapshot covering the whole screen - reported live as "a
-     quick white flash that covers the outgoing screen, then instantly
-     disappears." This plain, non-animated transform is this element's
-     position from the very first style calculation, independent of
-     whether the animation has started applying yet - nothing for that
-     gap to expose. */
-  transform: translateY(100vh) scale(0.8);
-  animation: page-content-rise 1.25s var(--ease-in-out-quart) 0.35s both;
+  /* A window-pane silhouette (a single rounded rect - no transform/scale
+     involved at all) cut as a CSS mask, growing from 0% size up past full
+     coverage. Deliberately NOT the transform-based rise this project used
+     before (git history/[[project_pagetransition_view_transitions_revert]]
+     in memory): that approach needed a static "from"-matching transform
+     baseline to dodge a real, confirmed engine timing gap (a freshly-
+     inserted pseudo-element can paint once at its plain, untransformed
+     position before a delayed animation's backwards-fill takes effect,
+     exposing one naked frame of the incoming page's own snapshot - reported
+     live as "a quick white flash"). A mask has no such gap to dodge: its
+     starting size (0% 0%) genuinely renders nothing, from the very first
+     style calculation, with no animated property needing to "catch up" to
+     a hidden state first. */
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='black'%3E%3Crect x='1' y='1' width='22' height='22' rx='2'/%3E%3C/svg%3E");
+  mask-repeat: no-repeat;
+  /* Bottom-anchored, not center - the pane should read as rising/growing
+     up from the bottom edge (this project's established "pane rises"
+     language, carried over from the previous transform-based version),
+     not emerging outward from the middle of the screen. */
+  mask-position: bottom;
+  mask-size: 0% 0%;
+  animation: page-content-pane-reveal 1.25s var(--ease-in-out-quart) 0.35s both;
   mix-blend-mode: normal;
 }
 
-@keyframes page-content-rise {
-  from {
-    transform: translateY(100vh) scale(0.8);
+@keyframes page-content-pane-reveal {
+  0% {
+    mask-size: 0% 0%;
   }
-  to {
-    transform: translateY(0) scale(1);
+  45% {
+    /* Mid-grow: still legible as a distinct rectangular pane against the
+       darkened outgoing page behind it, not yet covering the edges. */
+    mask-size: 45% 45%;
+  }
+  100% {
+    /* Deliberately past 100% 100% (which would exactly fill the viewport
+       box, per mask-size's background-size-style percentage math) so the
+       rect's own rounded corners push fully outside the visible frame -
+       without this, the settle would show visible rounded notches bitten
+       out of the viewport's own corners instead of a clean full-bleed
+       reveal. */
+    mask-size: 140% 140%;
   }
 }
 
@@ -244,5 +261,13 @@ html.lenis.lenis-stopped:not(.lenis-autoToggle) {
   ::view-transition-old(root),
   ::view-transition-new(root) {
     animation: none;
+  }
+  /* mask-size: 0% 0% above is a plain property value, not just an
+     animation keyframe - disabling the animation alone would leave the
+     incoming page permanently masked out at zero size. Drop the mask
+     entirely instead of just resizing it, so there's no shape, rounding,
+     or sizing math left to get wrong under reduced motion. */
+  ::view-transition-new(root) {
+    mask-image: none;
   }
 }
