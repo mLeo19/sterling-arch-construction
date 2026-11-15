@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import { Link } from "next-view-transitions";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getService, services } from "@/lib/data/services";
 import { getProject } from "@/lib/data/projects";
