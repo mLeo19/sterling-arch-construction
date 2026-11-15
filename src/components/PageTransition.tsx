@@ -318,11 +318,15 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   // code gets a chance to see the real, current (outgoing) scrollY at all.
   // "manual" disables only the browser's own native auto-restore - it
   // doesn't stop this app's own settle-time scroll reset (see the
-  // settleTick layout effect above), which already resets scroll to 0 on
+  // settleTick layout effect below), which already resets scroll to 0 on
   // every navigation regardless of how it started, keeping back/forward
   // consistent with every other nav in this app rather than introducing a
   // separate "restore where you were" behavior nothing else here has.
-  // Empty deps - set once, for this component's entire lifetime.
+  //
+  // This mount-time assignment only covers the window before the first
+  // settle, not the rest of the session - see the settleTick layout
+  // effect's own doc comment below for why this gets re-asserted there
+  // too, every settle, not just once here.
   useEffect(() => {
     if (typeof history !== "undefined" && "scrollRestoration" in history) {
       history.scrollRestoration = "manual";
@@ -529,6 +533,29 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     }
     document.body.style.overflow = "";
     transitioningRef.current = false;
+
+    // Re-asserted here, every settle, not just once on mount (see that
+    // effect's own doc comment above) - confirmed live: the mount-time
+    // assignment alone measurably reverts to "auto" on its own, exactly in
+    // step with this app's own router settling (visible as the moment
+    // document.documentElement.scrollHeight jumps from its placeholder
+    // height to the real page height) - almost certainly Next's own router
+    // calling history.replaceState() to attach its segment-cache state to
+    // the entry, which per spec resets that entry's own scroll restoration
+    // mode back to "auto" regardless of what this app set it to earlier.
+    // Confirmed this is what actually broke browser back: navigating away
+    // and back after that reset let the browser's native scroll-restore
+    // silently reassert the *previous* visit's scrollY on top of this
+    // app's own lock mid-transition (overflow:hidden alone, per
+    // snapshotOutgoingPage's own doc comment, never stops a programmatic
+    // scroll change like this one, only user-gesture-driven scrolling) -
+    // reproducible in plain Chromium, not a real-device-only bug. Setting
+    // it again here, every settle (i.e. for every entry, right after
+    // whatever Next just did to it), closes that window back up for the
+    // *next* back/forward off this entry.
+    if (typeof history !== "undefined" && "scrollRestoration" in history) {
+      history.scrollRestoration = "manual";
+    }
   }, [settleTick, lenisRef]);
 
   // Snapshots the current outgoing page - the clone/freeze/darken/height-
