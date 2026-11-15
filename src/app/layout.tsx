@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import { ViewTransitions } from "next-view-transitions";
 import SmoothScroll from "@/components/SmoothScroll";
 import { IntroSequence } from "@/components/motion/IntroSequence";
 import { PageTransition } from "@/components/PageTransition";
@@ -53,19 +54,21 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full">
-        <SmoothScroll>
-          <IntroSequence>
-            <PageTransition>{children}</PageTransition>
-            <Footer />
-            <SiteNav />
-          </IntroSequence>
-        </SmoothScroll>
-      </body>
-    </html>
+    <ViewTransitions>
+      <html
+        lang="en"
+        className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      >
+        <body className="min-h-full">
+          <SmoothScroll>
+            <IntroSequence>
+              <PageTransition>{children}</PageTransition>
+              <Footer />
+              <SiteNav />
+            </IntroSequence>
+          </SmoothScroll>
+        </body>
+      </html>
+    </ViewTransitions>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { Link } from "next-view-transitions";
 import { usePathname } from "next/navigation";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
@@ -555,17 +555,18 @@ export function SiteNav() {
     <>
       <div
         ref={navRef}
-        // z-[110]: permanently above PageTransition's pane/backdrop (max
-        // z-10, see that file) and the intro overlay (z-100) - see the doc
-        // comment above for why this replaced a temporary rise-only bump.
-        // Staying invisible the rest of the time is handled by opacity,
-        // not z-index (opacity-0 below, until the entrance timeline sets
-        // it to 1), so sitting above everything at rest the whole session
-        // is harmless. Rendered as a plain layout.tsx sibling of
-        // PageTransition, never inside its pane, so it's never swept up
-        // in the pane's own rise/scale - nothing further needed to keep
-        // it static.
-        className="fixed bottom-10 left-1/2 z-[110] -translate-x-1/2 opacity-0"
+        // z-[110]: permanently above PageTransition's pane (max z-101, see
+        // that file) and the intro overlay (z-100) - see the doc comment
+        // above for why this replaced a temporary rise-only bump. Staying
+        // invisible the rest of the time is handled by opacity, not z-index
+        // (opacity-0 below, until the entrance timeline sets it to 1), so
+        // sitting above everything at rest the whole session is harmless.
+        // site-nav-pill: pulls this out of the View Transition's default
+        // root snapshot group (globals.css) - a persistent, always-fixed
+        // piece of chrome has to stay perfectly static through a
+        // navigation's crossfade, never duplicated/transformed along with
+        // the page content rising underneath it.
+        className="site-nav-pill fixed bottom-10 left-1/2 z-[110] -translate-x-1/2 opacity-0"
       >
         <div
           ref={pillRef}

@@ -35,23 +35,21 @@ export const duration = {
 // element, its transform is matrix(0.8, 0, 0, 0.8, 0, <viewportHeight>) the
 // instant it appears, animating to matrix(1,0,0,1,0,0) at rest - scale
 // 0.8 -> 1 and translateY 100% -> 0 together, not a pure slide). See
-// pageSlideScaleFrom below for the matching scale constant.
-//
-// The margin that scale leaves while below 1 shows a permanently-dark
-// backdrop behind the pane (PageTransition.tsx's backdropRef), matching
-// fluid.glass's own actual technique. An earlier version of this project
-// instead kept the *real* outgoing page visible there, darkened in place -
-// first via DOM-cloning it, later via the browser's native View
-// Transitions API, chasing an exact visual match to fluid.glass. Both
-// proved unreliable in ways that only showed
-// up on a real device (wrong-content flashes, scroll corruption, a white
-// flash from a browser-engine timing gap) across many rounds of fixes -
-// full history in this file's own git log and this project's memory if
-// that's ever worth re-deriving. The solid backdrop gives up pixel-exact
-// fidelity in exchange for a mechanism with no browser API and no DOM
-// cloning left to go wrong - plain React/GSAP state, the same kind this
-// project's own incoming pane has used without a single bug this entire
-// history.
+// pageSlideScaleFrom below for the matching scale constant. No backdrop
+// behind the margin that scale leaves while below 1 - fluid.glass has one
+// (a permanently-dark element sitting behind their own single shared
+// pane), but this project's two-slot design keeps the *real* outgoing page
+// visible underneath instead of unmounting it, so that margin already
+// shows real content on its own; a backdrop on top of that read as the
+// whole screen blacking out before the new page slides over it, not as a
+// pane. The outgoing page itself *does* darken during the transition now
+// though (see pageOutgoingDarkenOpacity below) - a different thing from
+// that rejected backdrop: it dims the old page in place, in whatever
+// margin is showing around the incoming pane, rather than covering the
+// screen with a separate dark layer - added because two pages sharing the
+// same light background (e.g. About -> Contact, both cream) made the
+// incoming pane's own rise unreadable as a pane at all, reading instead as
+// the new page's text just appearing on its own.
 //
 // Duration itself is also slower than this project's first attempt - 0.65s
 // read as noticeably snappier than fluid.glass's own ~1s rise, and even
@@ -84,6 +82,13 @@ export const pageTransitionSettleDuration =
 // comment above for how this was confirmed.
 export const pageSlideScaleFrom = 0.8;
 
+// How dark PageTransition's outgoing-page snapshot gets tinted (a plain
+// black overlay faded in on top of it, see PageTransition.tsx) over the
+// course of the transition - not full black, just enough contrast that
+// the old page visibly recedes even against an incoming page sharing the
+// same light background, without reading as the screen blacking out the
+// way a full-opacity cover would.
+export const pageOutgoingDarkenOpacity = 0.55;
 
 // How long the intro loader's own overlay (the cream BrandMark/wordmark
 // screen, see IntroSequence.tsx) takes to fade itself out of the way once
