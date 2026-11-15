@@ -21,19 +21,19 @@ import {
  * another after, so there is no live DOM to clone, no <img> to freeze, no
  * scroll position to lock/measure/restore by hand. The fluid.glass-style
  * rising pane + outgoing darken is pure CSS now (globals.css, targeting
- * ::view-transition-old/new(page-content)) - this component's only
- * remaining navigation-adjacent jobs are:
- *   1. giving that CSS something to target (the page-transition-content
- *      class below), and
- *   2. closing the mobile menu *instantly*, with no animation, before a
- *      transition's "old" snapshot is taken - that snapshot happens
- *      synchronously, inside next-view-transitions' own click/popstate
- *      handling, potentially before React has processed anything else from
- *      the same event, so a capture-phase document listener (not React's
- *      own synthetic bubble-phase system) is the only reliable way to run
- *      before it. See pageTransitionState.onNavigate's own doc comment in
- *      lib/motion.ts for why this is a shared callback SiteNav registers
- *      itself into, rather than this file owning the menu's state directly.
+ * ::view-transition-old/new(root) - deliberately the default *unnamed*
+ * transition, not a view-transition-name on this file's own wrapper div;
+ * see globals.css's own doc comment for why naming it was tried and caused
+ * a real bug) - this component's only remaining navigation-adjacent job is
+ * closing the mobile menu *instantly*, with no animation, before a
+ * transition's "old" snapshot is taken - that snapshot happens
+ * synchronously, inside next-view-transitions' own click/popstate
+ * handling, potentially before React has processed anything else from
+ * the same event, so a capture-phase document listener (not React's
+ * own synthetic bubble-phase system) is the only reliable way to run
+ * before it. See pageTransitionState.onNavigate's own doc comment in
+ * lib/motion.ts for why this is a shared callback SiteNav registers
+ * itself into, rather than this file owning the menu's state directly.
  *
  * This file previously hand-rolled all of that: a two-slot (slotA/slotB)
  * design kept the outgoing page's own live React subtree mounted and
@@ -204,7 +204,7 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   return (
     <div
       ref={ref}
-      className="page-transition-content relative bg-background"
+      className="relative bg-background"
       style={initialStyle}
     >
       {children}

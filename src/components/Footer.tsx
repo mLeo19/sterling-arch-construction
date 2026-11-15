@@ -215,19 +215,7 @@ export function Footer() {
   return (
     <footer
       ref={footerRef}
-      // footer-transition-group: pulls this into its own stable View
-      // Transition group (globals.css) instead of leaving it in the
-      // default "root" group, which spans the *entire* document and
-      // therefore has a different box size on every route (routes don't
-      // share one page height) - confirmed live: that size mismatch
-      // between the old and new "root" images read as Footer's own dark
-      // backdrop going fully blank for a couple of frames mid-transition,
-      // every time, while scrolled down into it. Footer's own box size is
-      // stable across every route (same markup, only its internal
-      // backdrop-photo crossfade differs - see Footer.tsx's own
-      // handleLoadA/handleLoadB), so its own named group never has that
-      // mismatch to begin with.
-      className="footer-transition-group relative flex min-h-[100svh] flex-col overflow-hidden bg-black text-white"
+      className="relative flex min-h-[100svh] flex-col overflow-hidden bg-black text-white"
     >
       <div
         ref={parallaxRef}

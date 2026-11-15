@@ -103,28 +103,26 @@ html.lenis.lenis-stopped:not(.lenis-autoToggle) {
    pageSlideHoldDuration, pageSlideScaleFrom, pageOutgoingDarkenOpacity) -
    CSS can't import a JS module, so if those ever change, change these too. */
 
-/* The per-route content wrapper (PageTransition.tsx) - the only element
-   that actually rises. Its captured snapshot is the *whole* route's
-   rendered height, not just the current viewport slice (per the View
-   Transitions spec, an element's image is its own full paint, not clipped
-   to what's currently scrolled into view) - transform-origin: top anchors
-   the scale/translate math at the element's own top edge specifically so
-   the part that's actually visible (always just below the viewport's own
-   top edge while this rises into frame) behaves identically regardless of
-   how tall any given route's full content happens to be. Confirmed live:
-   anchoring at the default center instead made the rise distance and scale
-   read differently per route depending on each page's own total height. */
-.page-transition-content {
-  view-transition-name: page-content;
-  transform-origin: top;
-}
+/* Everything drives off the default, UNNAMED "root" transition - PageTransition.tsx's
+   per-route content wrapper deliberately has NO view-transition-name of its
+   own. An earlier version gave it one (page-content), which was wrong and
+   caused a real, confirmed-live bug: naming it makes the browser treat old
+   and new as "the same persistent thing that moved," so it snapped/tracked
+   the element's box to the NEW (already-scrolled-to-0) live position
+   immediately - reading as the *outgoing* page visibly jumping/scrolling
+   to the top before the transition even started, instead of staying
+   frozen exactly where the user left it. root has no such problem: its
+   captured image is a flat, fixed viewport-sized screenshot on each side
+   (old before the DOM mutates, new after), with nothing live to track -
+   the standard, correct way to drive a full-page crossfade like this one.
 
-/* SiteNav's pill must stay perfectly static through every transition - a
-   persistent, always-fixed piece of chrome, not page content. Pulling it
-   into its own named group (see its own site-nav-pill class in
-   SiteNav.tsx) is what keeps it out of the root group below, which
-   otherwise captures the entire remaining viewport as a single image and
-   would carry this along with whatever transform/animation applies there. */
+   SiteNav's pill must stay perfectly static through every transition - a
+   persistent, always-fixed piece of chrome, not page content, and the one
+   thing that DOES need its own name: position:fixed means its viewport
+   rect never changes with scroll, so (unlike page content or Footer) it
+   has no live position for the browser to snap it to - naming it is safe
+   here specifically, and necessary to keep it out of root's own
+   transform/darken below. */
 .site-nav-pill {
   view-transition-name: site-nav;
 }
@@ -136,75 +134,21 @@ html.lenis.lenis-stopped:not(.lenis-autoToggle) {
   animation: none;
 }
 
-/* Footer - its own stable group, not left in the default "root" one below.
-   Root spans the *entire* document, which has a different total height on
-   every route; disabling root's own group animation stops it visibly
-   morphing between those two sizes over time, but not the old/new
-   *images* themselves being sized to their own route's mismatched
-   dimensions within that shared box - confirmed live, the symptom was
-   Footer's own dark backdrop going fully blank for a couple of frames
-   mid-transition, every time, while scrolled down into it. Footer's own
-   box size is stable across every route (same markup, only its internal
-   backdrop-photo crossfade differs - see Footer.tsx's own
-   handleLoadA/handleLoadB), so its own named group never has that
-   mismatch to begin with. */
-.footer-transition-group {
-  view-transition-name: footer;
-}
-
-::view-transition-group(footer),
-::view-transition-image-pair(footer),
-::view-transition-old(footer),
-::view-transition-new(footer) {
+/* root's own group (the shared box both old/new images sit in) - disabled
+   so it doesn't try to morph its box between the old and new document's
+   own dimensions; the rise/darken below are applied directly to the old
+   and new *images* instead; root's own captured box is the viewport
+   itself, not a scroll-dependent content box, so there's no page-height
+   mismatch to worry about the way a specific element's box would have. */
+::view-transition-group(root) {
   animation: none;
 }
 
-/* Root = whatever's left (mainly <body>'s own plain background - uniform
-   across every route, nothing visible left in this group to glitch).
-   Known gap, not fixed here: navigating from deep in a long page's scroll
-   (e.g. the bottom-auto-opened mobile menu) shows a brief (~pageSlideHold
-   Duration-long) plain cream beat before the incoming pane rises - Next
-   resets scroll to 0 as part of committing the new route, before this
-   transition's hold/rise even starts, and the live page-content element is
-   hidden from normal rendering for the duration of the transition (the
-   standard View Transitions behavior for any named participant - only its
-   ::view-transition-new(page-content) image is supposed to be visible,
-   and that's deliberately held off-screen for this same window, see
-   page-content-rise below), so there's nothing in that specific region to
-   paint at all until the hold ends. Tried and reverted: animating
-   ::view-transition-new(root)'s own filter to fake a black beat there -
-   had no visible effect, because root's own captured image doesn't cover
-   that region to begin with (nothing distinct belongs to the "root" group
-   at the top of a freshly-committed page) - confirmed live. A real fix
-   needs a plain, non-pseudo-element overlay toggled by JS in sync with
-   document.startViewTransition()'s own lifecycle, not CSS on the pseudo-
-   tree alone. Left as a known, narrow, purely cosmetic trade-off - every
-   top-of-page navigation (the common case) is unaffected, and this is a
-   different class of issue entirely from the scroll-corruption bug this
-   whole rewrite exists to eliminate (see PageTransition.tsx's own doc
-   comment). */
-::view-transition-group(root),
-::view-transition-image-pair(root),
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation: none;
-  mix-blend-mode: normal;
-}
-
-/* The group's own default animation interpolates a shared box between the
-   old and new element's geometry - page-content occupies the same
-   full-viewport-width box on both sides of every navigation, nothing to
-   morph, and the old/new images are meant to be independently layered
-   (new rising over old) rather than reconciled into one. */
-::view-transition-group(page-content) {
-  animation: none;
-}
-
-::view-transition-image-pair(page-content) {
+::view-transition-image-pair(root) {
   isolation: auto;
 }
 
-::view-transition-old(page-content) {
+::view-transition-old(root) {
   transform-origin: top;
   /* Stays fully visible and in place for the entire transition - the
      darken below is what reads as it receding, not an opacity fade. An
@@ -216,7 +160,7 @@ html.lenis.lenis-stopped:not(.lenis-autoToggle) {
   mix-blend-mode: normal;
 }
 
-::view-transition-new(page-content) {
+::view-transition-new(root) {
   transform-origin: top;
   animation: page-content-rise 1.25s var(--ease-in-out-quart) 0.35s both;
   mix-blend-mode: normal;
@@ -246,8 +190,8 @@ html.lenis.lenis-stopped:not(.lenis-autoToggle) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(page-content),
-  ::view-transition-new(page-content) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
     animation: none;
   }
 }
