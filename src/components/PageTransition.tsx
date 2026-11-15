@@ -766,15 +766,29 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     // nothing to flow.
     lockedOutgoingHeightRef.current = activeHeight;
 
-    // A plain sibling, not a child of clone and not baked into its own
-    // background - sits one z-index above it (6, still below the
-    // incoming pane's 10) so it darkens the *whole* clone uniformly
-    // regardless of what's inside it, rather than needing to reach
-    // into the clone's own markup. Faded in via GSAP rather than set
-    // once at full strength - an instant hard cut here read as exactly
-    // the "whole screen blacking out" effect this project's own
-    // history already rejected once (see pageOutgoingDarkenOpacity's
-    // doc comment in lib/motion.ts).
+    // A CHILD of clipWrapper, not a sibling with its own independent
+    // inset:0 (an earlier version of this did exactly that) - position:
+    // absolute inside clipWrapper (which, being position:fixed, is a
+    // containing block for it) means this can only ever cover exactly
+    // clipWrapper's own clipped region, inheriting visibleCloneHeight for
+    // free with no separate calculation to keep in sync. The earlier
+    // sibling version, with its own unconditional inset:0, darkened the
+    // ENTIRE viewport regardless of how much (if any) of the outgoing
+    // page the clone actually covered - confirmed live: scrolled fully
+    // into Footer (clone correctly showing nothing, visibleCloneHeight
+    // 0), this still slammed a 55%-opacity black rectangle across the
+    // real, live Footer sitting right there, the instant a navigation
+    // started, well before the incoming pane had risen at all. Darkening
+    // content that was never part of the outgoing page's own area (not
+    // "the thing being covered," just whatever happened to already be a
+    // viewport scroll away) was never the intent - the whole point was
+    // contrast between the outgoing and incoming PAGE, not a blanket
+    // screen-wide dim independent of what's actually transitioning.
+    //
+    // Faded in via GSAP rather than set once at full strength - an
+    // instant hard cut here read as exactly the "whole screen blacking
+    // out" effect this project's own history already rejected once (see
+    // pageOutgoingDarkenOpacity's doc comment in lib/motion.ts).
     //
     // Deliberately its own short duration/ease, not a match for the
     // incoming pane's own pageSlideHoldDuration+pageSlideDuration
@@ -791,13 +805,13 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     // of the rise - the outgoing page doesn't need to keep darkening
     // once it's already unambiguous which page is which.
     const darken = document.createElement("div");
-    darken.style.position = "fixed";
+    darken.style.position = "absolute";
     darken.style.inset = "0";
-    darken.style.zIndex = "6";
     darken.style.pointerEvents = "none";
     darken.style.background = "#000";
     darken.style.opacity = "0";
-    host.replaceChildren(clipWrapper, darken);
+    clipWrapper.appendChild(darken);
+    host.replaceChildren(clipWrapper);
     // Forces layout before the scrollTop assignment below - a browser
     // doesn't necessarily know scrollContainer's own scrollable range
     // yet at the instant it's inserted (that requires having laid out
