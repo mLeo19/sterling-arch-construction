@@ -218,28 +218,43 @@ html.lenis.lenis-stopped:not(.lenis-autoToggle) {
      language, carried over from the previous transform-based version),
      not emerging outward from the middle of the screen. */
   mask-position: bottom;
-  mask-size: 0% 0%;
+  /* vmax, NOT %. mask-size percentages are independently relative to the
+     box's own width and height (background-size-style math) - on a
+     desktop-ish viewport (wider than tall) that stays close enough to
+     square to look fine, but confirmed live on an actual phone (390x844,
+     tall and narrow) it stretches the same square SVG into a thin
+     vertical sliver, with the two axes growing to full coverage at
+     visibly different times - a hard, uncovered seam cutting across the
+     screen mid-transition instead of one clean edge. vmax is relative to
+     whichever viewport dimension is LARGER, applied identically to both
+     mask-size components, so the rendered shape is always a true square
+     regardless of the viewport's own aspect ratio - portrait phone or
+     landscape desktop alike. */
+  mask-size: 0vmax 0vmax;
   animation: page-content-pane-reveal 1.25s var(--ease-in-out-quart) 0.35s both;
   mix-blend-mode: normal;
 }
 
 @keyframes page-content-pane-reveal {
   0% {
-    mask-size: 0% 0%;
+    mask-size: 0vmax 0vmax;
   }
   45% {
-    /* Mid-grow: still legible as a distinct rectangular pane against the
+    /* Mid-grow: still legible as a distinct square pane against the
        darkened outgoing page behind it, not yet covering the edges. */
-    mask-size: 45% 45%;
+    mask-size: 45vmax 45vmax;
   }
   100% {
-    /* Deliberately past 100% 100% (which would exactly fill the viewport
-       box, per mask-size's background-size-style percentage math) so the
-       rect's own rounded corners push fully outside the visible frame -
-       without this, the settle would show visible rounded notches bitten
-       out of the viewport's own corners instead of a clean full-bleed
-       reveal. */
-    mask-size: 140% 140%;
+    /* 100vmax alone is already provably enough: a square whose side is
+       the LARGER viewport dimension is, by definition, at least as big as
+       the smaller one too, so it fully covers the box on both axes at
+       once regardless of aspect ratio - no separate math needed per
+       orientation the way the old %-based version implicitly required.
+       Still overshoot slightly (115vmax) so the rect's own rounded
+       corners push fully outside the visible frame, for a clean full-
+       bleed settle with no rounded notches bitten out of the viewport's
+       own corners. */
+    mask-size: 115vmax 115vmax;
   }
 }
 
