@@ -331,11 +331,9 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
 
   // Fires once React has actually committed a real navigation (pathname
   // genuinely changed), mounting the new route's children into whichever
-  // slot isn't currently active. Scroll is locked here, immediately - not
-  // waiting for the new slot to actually mount - since locking a beat
-  // early costs nothing visible, while the spacer (which does need exact
-  // timing, see TransitionPane below) would show a false gap in the
-  // *outgoing* page's own layout if sized here instead of synchronously
+  // slot isn't currently active. Scroll itself is already locked by the
+  // time this runs (see snapshotOutgoingPage's own lock, below) - this
+  // effect only ever reserves the spacer's own room, timed synchronously
   // with the incoming pane actually going position:fixed.
   const prevPathnameRef = useRef(pathname);
   useEffect(() => {
@@ -347,14 +345,6 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     if (nextSlot === "A") setSlotA(entry);
     else setSlotB(entry);
     setPaneReserved(true);
-
-    // Both, not either/or: lenis.stop() alone only gates the gesture-
-    // driven input paths it actually listens for (wheel/touch) - keyboard
-    // scroll, a dragged scrollbar thumb, and middle-click autoscroll all
-    // move window.scrollY natively, outside Lenis entirely, regardless of
-    // whether it exists or is stopped.
-    lenisRef?.current?.stop();
-    document.body.style.overflow = "hidden";
     // children deliberately not a dependency - this effect has to run
     // exactly once per real pathname change and read whatever `children`
     // this render already carries (always the new route's content by the
@@ -564,6 +554,42 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   // on *every* back-button press, not intermittently - a structural gap in
   // coverage, not a timing race.
   function snapshotOutgoingPage() {
+    // Locked here, synchronously, as the very first thing this function
+    // does - not deferred to the pathname-change effect further down,
+    // which used to be the only place this ran. That effect only fires
+    // once React has actually committed the new route, which on a real
+    // device can be several frames (or, unprefetched, much longer) after
+    // this click/popstate - every one of those frames was a frame real
+    // device scroll (trackpad glide, or specifically an iOS rubber-band
+    // bounce-back still animating from an overscroll past the real
+    // bottom of the page) was free to keep moving window.scrollY out from
+    // under the clip-region measurement just below, which only ever reads
+    // it once and bakes the result into a static height. Confirmed live,
+    // on an actual iPhone, scrolled to the very bottom of a page (the one
+    // case that measurement intentionally covers nothing at all, trusting
+    // the real page underneath to stay put - see visibleCloneHeight's own
+    // doc comment): tapping a menu link while that bounce-back was still
+    // settling let scrollY drift back up after this point, exposing a
+    // strip of the real outgoing page's own DOM the clip was never sized
+    // to cover - and by the time that strip was exposed, it had already
+    // silently re-rendered to the *new* route's content (see
+    // snapshotHostRef's own doc comment on why that re-render happens at
+    // all), reading as the new page's content flashing in before the
+    // transition itself had even started.
+    //
+    // Both, not either/or: lenis.stop() alone only gates the gesture-
+    // driven input paths it actually listens for (wheel/touch) - keyboard
+    // scroll, a dragged scrollbar thumb, and middle-click autoscroll all
+    // move window.scrollY natively, outside Lenis entirely, regardless of
+    // whether it exists or is stopped. overflow:hidden is the only lock
+    // that exists at all on a touch device - Lenis is never created there
+    // (see SmoothScroll.tsx) - and still isn't a hard guarantee against
+    // momentum already in flight at this exact instant on iOS, but moving
+    // it this early removes by far the largest part of the window that
+    // bug actually needed to reproduce.
+    lenisRef?.current?.stop();
+    document.body.style.overflow = "hidden";
+
     // Snapshot the currently-active (about-to-be-outgoing) pane's real DOM
     // *before* the route actually changes - see snapshotHostRef's own doc
     // comment for why this has to be a static clone, not a live React
@@ -901,6 +927,13 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     // routerRef's own doc comment above.
     document.addEventListener("click", handleClick, true);
     return () => document.removeEventListener("click", handleClick, true);
+    // snapshotOutgoingPage omitted deliberately, same as routerRef above -
+    // it's a fresh closure every render, but one that only ever reads refs
+    // (including lenisRef, exactly as stable as a literal useRef() despite
+    // coming from useLenis() instead - the eslint rule just can't tell) and
+    // globals, never a value that actually changes across renders, so every
+    // render's instance behaves identically to every other.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Gives browser back/forward the exact same treatment as a real link
@@ -945,6 +978,9 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     }
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
+    // snapshotOutgoingPage omitted deliberately - see the matching comment
+    // on the click-listener effect above.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // useCallback, not a plain function - it's a dependency of TransitionPane's
