@@ -130,6 +130,27 @@ export function Footer() {
     (back === "A" ? setImageA : setImageB)(next);
   }, [pathname]);
 
+  // Covers a real, confirmed browser quirk: reassigning an <img>'s src
+  // back to a resource that's already fully cached/decoded doesn't
+  // reliably refire the native 'load' event. Confirmed live: navigating
+  // to a route whose footer image had already loaded on this exact layer
+  // earlier (e.g. back to home, whose image was the very first thing this
+  // component ever loaded) left handleLoadA/B never firing again at all -
+  // permanently stuck showing whatever was last actually crossfaded to,
+  // regardless of how many further navigations happened. Keyed on the
+  // image state itself (not pathname), so this always runs *after* React
+  // has committed the new src to the DOM - if the browser already
+  // considers that layer's image complete by then, this runs the exact
+  // same onLoad logic directly instead of waiting for an event that may
+  // never come. Harmless for the normal (genuinely uncached) case: a
+  // fresh image's `complete` reads false here, same tick, and the real
+  // onLoad handler fires normally once the network fetch actually
+  // finishes.
+  useEffect(() => {
+    if (layerARef.current?.querySelector("img")?.complete) handleLoadA();
+    if (layerBRef.current?.querySelector("img")?.complete) handleLoadB();
+  });
+
   // Runs the crossfade the instant the new photo actually loads - no
   // artificial delay needed. PageTransition.tsx's own cover()/reveal()
   // sequence (PageTransitionColumns.tsx) guarantees the *entire* screen,
@@ -173,11 +194,26 @@ export function Footer() {
         className="absolute inset-x-0 top-[-25%] h-[150%] w-full"
       >
         <div ref={layerARef} className="absolute inset-0">
+          {/* priority, not the default lazy - this component deliberately
+              preloads the *next* route's image into whichever layer is
+              currently hidden, specifically so it's already loaded by the
+              time runCrossfade needs it (see handleLoadA/handleLoadB's own
+              doc comment). Footer sits below the fold on every page by
+              definition (it's the last section), so native lazy-loading
+              never even starts the download until scrolled near viewport -
+              confirmed live: navigating without scrolling to Footer left
+              the hidden layer's onLoad never firing at all, and a
+              subsequent navigation's own src reassignment overwrote that
+              still-pending src before it ever got a chance to load,
+              leaving the visible layer stuck on a stale image
+              indefinitely. `priority` disables lazy-loading entirely,
+              matching what this component's own design already assumed. */}
           <Image
             src={imageA.src}
             alt={imageA.alt}
             fill
             sizes="100vw"
+            priority
             className="object-cover"
             onLoad={handleLoadA}
           />
@@ -188,6 +224,7 @@ export function Footer() {
             alt={imageB.alt}
             fill
             sizes="100vw"
+            priority
             className="object-cover"
             onLoad={handleLoadB}
           />

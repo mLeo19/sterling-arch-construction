@@ -45,7 +45,22 @@ export const duration = {
 // Values tuned by direct feedback on the live site, not derived from any
 // external reference - this isn't chasing fluid.glass's own look anymore.
 export const pageColumnCount = 12;
-export const pageColumnStagger = 0.08;
+// A fixed TOTAL stagger spread (0.4s - the original, separately-tuned
+// value from this project's first version of this exact mechanism, which
+// used 6 columns at a flat 0.08s stagger each: 0.08*5=0.4), divided across
+// however many columns there are - not a flat per-column stagger. Bumping
+// pageColumnCount alone (6 -> 12, user's explicit request) while leaving a
+// flat per-column stagger fixed would silently double the group's own
+// total spread on every cover()/reveal() call, stacking with the fixed
+// cover/reveal durations below to push a single full cycle from ~2.15s to
+// ~3.5s worst-case. That's long enough for a real, not-even-rare user
+// interaction - clicking a second link before the first settles - to slip
+// past this file's own re-entrancy guard (see queuedHrefRef's doc comment
+// in PageTransition.tsx for the bug that surfaced from exactly this).
+// Keeping the group's own total spread constant regardless of column
+// count means a future column-count change can't silently reopen that
+// same timing problem.
+export const pageColumnStagger = 0.4 / (pageColumnCount - 1);
 export const pageColumnCoverDuration = 0.65;
 export const pageColumnRevealDuration = 0.7;
 export const pageColumnCoverEase = "back.out(1.4)";

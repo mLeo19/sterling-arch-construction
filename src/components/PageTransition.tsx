@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { ScrollTrigger } from "@/lib/gsap";
 import { useIntroReady } from "@/components/motion/IntroSequence";
 import { pageColumnsApi } from "@/components/PageTransitionColumns";
 import { pageRevealHoldDuration, pageTransitionState } from "@/lib/motion";
@@ -34,6 +35,12 @@ import { pageRevealHoldDuration, pageTransitionState } from "@/lib/motion";
  * for the fix: popstate snaps the columns to their fully-covered end state
  * synchronously, with no animation, removing that window entirely rather
  * than trying to win a race against it.
+ *
+ * A click arriving while a previous one is still mid-cycle doesn't get
+ * dropped - see queuedHrefRef's own doc comment below for why that used
+ * to let next/link's own default handler sneak an uncontrolled, un-
+ * animated navigation through underneath. It's queued (only the latest
+ * survives) and runs its own full cycle once the current one settles.
  */
 export function PageTransition({ children }: { children: React.ReactNode }) {
   const router = useRouter();
@@ -57,6 +64,24 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
   // until the pathname effect below confirms React has actually committed
   // the new page.
   const resolveRef = useRef<(() => void) | null>(null);
+  // A click arriving while transitioningRef is already true used to just
+  // `return` before preventDefault - the click's own default browser
+  // action (next/link's own onClick, which still runs in the bubble phase
+  // since this listener never stopped it) then fired completely
+  // uncontrolled: an instant, un-animated route swap with no cover(), no
+  // reveal(), and no ScrollTrigger.refresh() for the page it landed on.
+  // Confirmed live (a `page.on("load")` count that never incremented,
+  // ruling out a hard reload, plus the next pathname's own parallax
+  // reading as permanently stuck at its un-refreshed starting value) -
+  // this is a real, not-even-rare path: the full cover-through-reveal
+  // cycle takes long enough (see pageColumnCount's own doc comment) that
+  // clicking a second link before the first settles is an easy thing for
+  // an impatient real user to do. Queuing instead: preventDefault always
+  // fires now, so next/link's own handler never gets this click at all;
+  // if one's already in flight, only the *latest* queued href survives
+  // (overwriting, not stacking), and settleAfterCovered's own `finally`
+  // drains it once the current cycle fully finishes.
+  const queuedHrefRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (ready) pageTransitionState.hasPlayedInitial = true;
@@ -93,6 +118,24 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     return Promise.race([Promise.allSettled(decodePromises), decodeTimeout]);
   }, []);
 
+  // Checked after EITHER settle path (click or popstate) finishes - see
+  // queuedHrefRef's own doc comment above. Not folded into
+  // settleAfterCovered itself: that would make it call runClickNavigation
+  // and runClickNavigation call it right back, which isn't actually a
+  // problem for plain JS closures (both call each other only once already
+  // running, never at definition time) but IS something React's hooks
+  // lint has no way to verify is safe, so it can't be expressed as two
+  // mutually-dependent useCallbacks here - each of this function's two
+  // call sites (runClickNavigation's own promise chain below, and
+  // handlePopState further down) runs it directly instead.
+  function drainQueuedHref() {
+    const queued = queuedHrefRef.current;
+    if (queued) {
+      queuedHrefRef.current = null;
+      runClickNavigation(queued);
+    }
+  }
+
   // Shared by both the click and popstate paths once the screen is
   // already (or about to be) fully covered: wait for the route to commit,
   // wait out the decode race, reveal. `afterCovered` is where the two
@@ -106,6 +149,24 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       resolveRef.current = resolve;
     });
     return routeCommitted
+      .then(() => {
+        // Every ScrollTrigger on the page (Footer's own parallax,
+        // Parallax.tsx, PinnedScale, etc.) caches its start/end scroll
+        // positions against the page's layout at the time it was
+        // created - stale the instant a real navigation swaps in a page
+        // with a different height, since nothing else re-measures them.
+        // Every previous PageTransition architecture called this on
+        // settle; this rebuild dropped it entirely. Confirmed live:
+        // without it, a parallax's own scrub read anywhere from "short of
+        // its real end" (a similarly-tall page) to "stuck at its very
+        // start value the whole time" (a much shorter page, where the
+        // stale end position no longer exists on the new page at all).
+        // Safe to refresh now, before reveal() - the new route's layout
+        // has already committed (that's what routeCommitted means), and
+        // the columns are still fully covering the screen regardless, so
+        // nothing user-visible depends on exactly when this runs.
+        ScrollTrigger.refresh();
+      })
       .then(waitForDecode)
       .then(() => pageColumnsApi.reveal())
       .finally(() => {
@@ -113,6 +174,37 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       });
   }, [waitForDecode]);
 
+  // Not wrapped in useCallback - its only non-stable-ref dependency is
+  // settleAfterCovered, which never changes identity (waitForDecode,
+  // transitively, never does either), so there would be nothing left for
+  // memoizing this to actually buy; a plain function keeps the two
+  // call sites below (handleClick, drainQueuedHref) simple closures
+  // instead of needing their own ref-mirroring dance.
+  function runClickNavigation(href: string) {
+    transitioningRef.current = true;
+    // Sequential, not concurrent: the columns have to be fully, solidly
+    // covering - not mid-stagger - before the route swap happens
+    // underneath, or a fast (likely, since this site is fully static)
+    // navigation can land while some columns haven't grown in yet,
+    // visible through the gap. router.push() only fires once cover()'s
+    // own promise has actually resolved.
+    pageColumnsApi.cover().then(() => {
+      routerRef.current.push(href);
+      settleAfterCovered().then(drainQueuedHref);
+    });
+  }
+
+  // runClickNavigation is a plain function (not useCallback) specifically
+  // because it and drainQueuedHref call each other (see runClickNavigation's
+  // own doc comment above) - true mutual recursion between two `const
+  // useCallback`s isn't expressible (each would need the other in its own
+  // dependency array before that other const has been initialized), and
+  // storing either in a ref to break the cycle is exactly the pattern
+  // this project's own stricter hooks lint now rejects outright. Safe to
+  // omit here: runClickNavigation only ever closes over refs and
+  // settleAfterCovered, neither of which this effect's own re-run would
+  // ever need to react to - the warning's underlying premise (this
+  // closure can go stale) doesn't actually hold for this function.
   useEffect(() => {
     function handleClick(event: MouseEvent) {
       if (event.defaultPrevented || event.button !== 0) return;
@@ -132,14 +224,13 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       }
       if (url.origin !== window.location.origin) return;
       if (url.pathname === window.location.pathname) return;
-      // Ignore a second nav attempt while one is already in flight, rather
-      // than compounding two overlapping cover()/reveal() sequences - the
-      // columns already cover the screen for the first one (and are
-      // pointer-events-none, so this is purely a don't-double-fire guard,
-      // not something blocking a real click), so there's nothing stale
-      // showing in the meantime for the user to click through anyway.
-      if (transitioningRef.current) return;
 
+      // preventDefault unconditionally, even if a transition is already
+      // in flight - see queuedHrefRef's own doc comment above for the bug
+      // that exists if this is skipped: next/link's own bubble-phase
+      // onClick still runs this exact click otherwise, doing an instant,
+      // completely uncontrolled route swap with no columns, no
+      // ScrollTrigger.refresh(), nothing.
       event.preventDefault();
       pageTransitionState.onNavigate?.();
 
@@ -152,17 +243,16 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      transitioningRef.current = true;
-      // Sequential, not concurrent: the columns have to be fully, solidly
-      // covering - not mid-stagger - before the route swap happens
-      // underneath, or a fast (likely, since this site is fully static)
-      // navigation can land while some columns haven't grown in yet,
-      // visible through the gap. router.push() only fires once cover()'s
-      // own promise has actually resolved.
-      pageColumnsApi.cover().then(() => {
-        routerRef.current.push(href);
-        settleAfterCovered();
-      });
+      if (transitioningRef.current) {
+        // Only the latest queued href survives - a second then third
+        // click while still covered should land wherever the user
+        // clicked *last*, not visit every intermediate link along the
+        // way.
+        queuedHrefRef.current = href;
+        return;
+      }
+
+      runClickNavigation(href);
     }
     // Capture phase, same reasoning as every click-listener this file has
     // ever used: runs before the anchor's own default navigation and
@@ -170,11 +260,22 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
     // the tree the actual link lives.
     document.addEventListener("click", handleClick, true);
     return () => document.removeEventListener("click", handleClick, true);
-  }, [settleAfterCovered]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
+  // drainQueuedHref is a plain function for the same reason
+  // runClickNavigation is (see its own explanation above the click
+  // effect) - it only closes over queuedHrefRef and runClickNavigation,
+  // neither of which this effect's own re-run would ever need to react to.
   useEffect(() => {
     function handlePopState() {
       pageTransitionState.onNavigate?.();
+      // A popstate represents the browser's own, already-committed
+      // navigation - it wins over anything merely queued from an earlier
+      // click (see queuedHrefRef's own doc comment above), rather than
+      // that queued click firing afterward and immediately navigating
+      // away from where the user just went back/forward to.
+      queuedHrefRef.current = null;
 
       const prefersReducedMotion = window.matchMedia(
         "(prefers-reduced-motion: reduce)",
@@ -188,10 +289,15 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
 
       transitioningRef.current = true;
       pageColumnsApi.coverInstant();
-      settleAfterCovered();
+      // Not draining anything queued *before* this popstate (cleared
+      // above), but a click can still arrive *during* this popstate's own
+      // settle (transitioningRef is already true by the time it would
+      // land) - that one still deserves its own cycle once this settles.
+      settleAfterCovered().then(drainQueuedHref);
     }
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settleAfterCovered]);
 
   return <>{children}</>;
