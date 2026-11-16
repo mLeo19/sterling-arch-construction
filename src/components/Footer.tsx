@@ -67,9 +67,8 @@ export function Footer() {
   const pendingRef = useRef<"A" | "B" | null>(null);
   const currentSrcRef = useRef(initialImage.src);
   const lastPathnameRef = useRef(pathname);
-  // The in-flight gsap.delayedCall scheduled by handleLoadA/handleLoadB
-  // below (see their own doc comment for why it's delayed at all), killed
-  // and replaced on every new navigation - see the pathname effect's own
+  // The in-flight gsap.delayedCall scheduled by the pathname effect below,
+  // killed and replaced on every new navigation - see that effect's own
   // doc comment for the exact race this prevents: without it, navigating
   // away again before a scheduled crossfade actually fires left that stale
   // call free to run later and flip this footer's visible layer to
@@ -78,6 +77,17 @@ export function Footer() {
   // between /approach and /services, as the footer's backdrop showing the
   // wrong page's photo.
   const pendingTweenRef = useRef<gsap.core.Tween | null>(null);
+  // Whether the pending layer's image has actually fired onLoad yet - set
+  // by handleLoadA/handleLoadB, read by the settle timer below (and vice
+  // versa: whichever of the two - the timer firing, or the load finishing -
+  // happens LAST is what actually triggers the crossfade). Reset to false
+  // on every new navigation.
+  const loadedRef = useRef(false);
+  // Whether this navigation's settle timer has already fired once (while
+  // still waiting on a slow image load) - lets handleLoadA/handleLoadB
+  // know the crossfade is now on them as soon as the load finishes,
+  // instead of double-scheduling another delayedCall.
+  const settleElapsedRef = useRef(false);
 
   // Backdrop parallax, the same technique and swing as Hero.tsx's own (see
   // that file's doc comment for the overhang math): the wrapper is 150% of
@@ -134,6 +144,11 @@ export function Footer() {
     gsap.set(outgoingRef.current, { opacity: 0 });
   }
 
+  // Schedules the settle timer from NAVIGATION itself (this effect, keyed
+  // on pathname), not from the image's own onLoad - see the comment above
+  // handleLoadA/handleLoadB below for why that distinction is the actual
+  // fix here, not just a refactor. contextSafe is already in scope (see
+  // useGSAP() above).
   useEffect(() => {
     if (pathname === lastPathnameRef.current) return;
     lastPathnameRef.current = pathname;
@@ -154,17 +169,26 @@ export function Footer() {
     // crossfade meant for a different route entirely.
     pendingTweenRef.current?.kill();
     pendingTweenRef.current = null;
+    loadedRef.current = false;
+    settleElapsedRef.current = false;
     const back = frontRef.current === "A" ? "B" : "A";
     pendingRef.current = back;
     (back === "A" ? setImageA : setImageB)(next);
-  }, [pathname]);
 
-  // contextSafe wraps runCrossfade here, inside the event handler itself,
-  // rather than once up front during render - the wrap only needs to
-  // happen before whichever call actually reads the refs/runs the tween,
-  // and doing it here keeps every ref access confined to an event-handler
-  // callback.
-  //
+    pendingTweenRef.current = gsap.delayedCall(
+      pageTransitionSettleDuration,
+      contextSafe(() => {
+        pendingTweenRef.current = null;
+        settleElapsedRef.current = true;
+        // Only run now if the image already finished loading - otherwise
+        // handleLoadA/handleLoadB (below) will see settleElapsedRef
+        // already true and fire the crossfade themselves the instant the
+        // load actually completes.
+        if (loadedRef.current) runCrossfade(back);
+      }),
+    );
+  }, [pathname, contextSafe]);
+
   // Delayed by pageTransitionSettleDuration (lib/motion.ts), not run the
   // instant the image loads - this footer is outside PageTransition
   // entirely (see layout.tsx), so it's never hidden behind that component's
@@ -173,43 +197,44 @@ export function Footer() {
   // the *new* route's photo the moment that photo finished decoding -
   // often within single-digit milliseconds, since it's frequently the
   // exact same file Hero.tsx already preloaded - well before the incoming
-  // pane had even started its own visible rise. Confirmed live via
-  // Playwright: a direct DOM query 150ms into a navigation found this
-  // footer's own image element already fully opaque and showing the new
-  // route's photo. If this footer happened to be anywhere near the
-  // viewport at that moment (scrolled partway down a page, say), the user
-  // saw that same photo flash in on its own, unscaled and un-animated,
-  // *before* the real pane later rose over the same spot showing it again
-  // - reading as a duplicated, broken transition rather than one clean
-  // reveal. Delaying until the pane's own worst-case settle time means
-  // this swap only ever happens once the pane has already covered the
-  // whole screen (this footer included, regardless of scroll position),
-  // matching what the "instant, not animated" choice above always assumed
-  // was already true.
+  // pane had even started its own visible rise. If this footer happened to
+  // be anywhere near the viewport at that moment (scrolled partway down a
+  // page, say), the user saw that same photo flash in on its own, unscaled
+  // and un-animated, *before* the real pane later rose over the same spot
+  // showing it again - reading as a duplicated, broken transition rather
+  // than one clean reveal.
+  //
+  // The delay itself is now scheduled from navigation time by the pathname
+  // effect above, NOT from this onLoad handler - these two just flag that
+  // the load side of the race finished, and fire the crossfade directly
+  // only if the timer side had already elapsed first. Confirmed live
+  // (Playwright, polling the footer's own <img src>/opacity through a real
+  // navigation): anchoring the delay to onLoad instead, like this file used
+  // to, put the crossfade's own clock on a different, later-starting timer
+  // than the page's own reveal - which, since the View Transitions rewrite,
+  // runs on a fixed CSS clock with no dependency on image decode at all.
+  // Even with the new photo already warm in cache, onLoad still fires some
+  // nonzero time after navigation starts (a frame or more), and that gap
+  // added directly onto the flat delay meant this footer's backdrop was
+  // reliably still showing the *previous* route's photo for a visible beat
+  // after the transition had already fully settled and the live page was
+  // right there on screen - exactly the reported "wrong background image"
+  // bug. Anchoring the timer to navigation time instead keeps it in lockstep
+  // with the CSS transition's own clock in the common case (image already
+  // loaded), while still never forcing a hidden, undecoded image visible
+  // early in the slow-network/cold-cache case - whichever of the two
+  // actually finishes last is what fires the crossfade.
   function handleLoadA() {
     if (pendingRef.current !== "A") return;
     pendingRef.current = null;
-    // Stored in pendingTweenRef so the pathname effect above can kill this
-    // exact call if another navigation arrives before it fires - see that
-    // ref's own doc comment.
-    pendingTweenRef.current = gsap.delayedCall(
-      pageTransitionSettleDuration,
-      contextSafe(() => {
-        pendingTweenRef.current = null;
-        runCrossfade("A");
-      }),
-    );
+    loadedRef.current = true;
+    if (settleElapsedRef.current) runCrossfade("A");
   }
   function handleLoadB() {
     if (pendingRef.current !== "B") return;
     pendingRef.current = null;
-    pendingTweenRef.current = gsap.delayedCall(
-      pageTransitionSettleDuration,
-      contextSafe(() => {
-        pendingTweenRef.current = null;
-        runCrossfade("B");
-      }),
-    );
+    loadedRef.current = true;
+    if (settleElapsedRef.current) runCrossfade("B");
   }
 
   return (
