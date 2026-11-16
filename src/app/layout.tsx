@@ -1,9 +1,9 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { ViewTransitions } from "next-view-transitions";
 import SmoothScroll from "@/components/SmoothScroll";
 import { IntroSequence } from "@/components/motion/IntroSequence";
 import { PageTransition } from "@/components/PageTransition";
+import { PageTransitionColumns } from "@/components/PageTransitionColumns";
 import { SiteNav } from "@/components/SiteNav";
 import { Footer } from "@/components/Footer";
 import { site } from "@/lib/data/site";
@@ -54,21 +54,24 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <ViewTransitions>
-      <html
-        lang="en"
-        className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-      >
-        <body className="min-h-full">
-          <SmoothScroll>
-            <IntroSequence>
-              <PageTransition>{children}</PageTransition>
-              <Footer />
-              <SiteNav />
-            </IntroSequence>
-          </SmoothScroll>
-        </body>
-      </html>
-    </ViewTransitions>
+    <html
+      lang="en"
+      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+    >
+      <body className="min-h-full">
+        <SmoothScroll>
+          <IntroSequence>
+            <PageTransition>{children}</PageTransition>
+            <Footer />
+            <SiteNav />
+          </IntroSequence>
+        </SmoothScroll>
+        {/* Outside SmoothScroll entirely - a position:fixed full-viewport
+            overlay has no reason to sit inside Lenis's own wrapper, since
+            it never scrolls. Mounted once, here, for the app's whole
+            lifetime - see PageTransitionColumns.tsx's own doc comment. */}
+        <PageTransitionColumns />
+      </body>
+    </html>
   );
 }

@@ -1,86 +1,118 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useGSAP } from "@gsap/react";
-import { gsap, ScrollTrigger } from "@/lib/gsap";
+import { useCallback, useEffect, useRef } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { useIntroReady } from "@/components/motion/IntroSequence";
-import {
-  ease,
-  pageSlideDuration,
-  pageSlideHoldDuration,
-  pageSlideScaleFrom,
-  pageTransitionState,
-} from "@/lib/motion";
+import { pageColumnsApi } from "@/components/PageTransitionColumns";
+import { pageRevealHoldDuration, pageTransitionState } from "@/lib/motion";
 
 /**
- * Every *real* navigation (link clicks and browser back/forward alike) is
- * now handled by the native View Transitions API, via next-view-transitions
- * (see <ViewTransitions> in layout.tsx, and the Link import swap across
- * every file that links internally) - document.startViewTransition() has
- * the browser capture a real bitmap of the page before the DOM mutates and
- * another after, so there is no live DOM to clone, no <img> to freeze, no
- * scroll position to lock/measure/restore by hand. The fluid.glass-style
- * rising pane + outgoing darken is pure CSS now (globals.css, targeting
- * ::view-transition-old/new(root) - deliberately the default *unnamed*
- * transition, not a view-transition-name on this file's own wrapper div;
- * see globals.css's own doc comment for why naming it was tried and caused
- * a real bug) - this component's only remaining navigation-adjacent job is
- * closing the mobile menu *instantly*, with no animation, before a
- * transition's "old" snapshot is taken - that snapshot happens
- * synchronously, inside next-view-transitions' own click/popstate
- * handling, potentially before React has processed anything else from
- * the same event, so a capture-phase document listener (not React's
- * own synthetic bubble-phase system) is the only reliable way to run
- * before it. See pageTransitionState.onNavigate's own doc comment in
- * lib/motion.ts for why this is a shared callback SiteNav registers
- * itself into, rather than this file owning the menu's state directly.
+ * A link click (or browser back/forward) covers the screen with
+ * PageTransitionColumns' own vertical-columns wipe, swaps the route
+ * underneath while fully hidden, then reveals it. See pageColumnCount's
+ * own doc comment in lib/motion.ts for why this project landed here
+ * instead of a browser-API-driven crossfade or a transform-based rising
+ * pane - both tried before, both the direct source of every real-device-
+ * only bug ever chased in this area (full history in this file's own git
+ * log and this project's memory, if that's ever worth re-deriving). This
+ * version never touches, measures, or clones the actual page content at
+ * all - the columns are a solid, opaque, purely decorative overlay
+ * sitting above everything while the real page quietly swaps behind it,
+ * which structurally can't exhibit that entire bug class.
  *
- * This file previously hand-rolled all of that: a two-slot (slotA/slotB)
- * design kept the outgoing page's own live React subtree mounted and
- * visible underneath a position:fixed incoming pane, with a cloneNode(true)
- * snapshot (plus a canvas-painted freeze for every <img>, to dodge a
- * decode race the clone alone caused) taken right before navigating away,
- * because Next's App Router unmounts/re-renders the outgoing route's own
- * context consumers immediately on navigation - there was no "live" outgoing
- * page left to show otherwise. That snapshot's own scroll alignment then had
- * to be locked and re-measured by hand for the rise's own duration, which is
- * exactly the piece that kept finding new ways to race: a browser's own
- * history-driven scroll restoration (not the native API gated by
- * history.scrollRestoration, but Next's own router re-asserting a cached
- * scroll position on a popstate-driven route change) won a race against
- * that hand-rolled lock on *every* back-navigation once the page had been
- * live long enough for Next's own internal history bookkeeping to run -
- * confirmed reproducible in plain Chromium, not a real-device-only bug, and
- * the thing that was still broken after nine other distinct, previously-
- * fixed root causes in this same mechanism (full history in this file's own
- * git log). None of that problem class exists once the browser is the one
- * taking the snapshot: it already has the exact right bitmap, at the exact
- * right scroll position, for both the outgoing and incoming page, with
- * nothing for this app's own JS to desync from.
- *
- * The one thing View Transitions can't help with is the very first page
- * load - there's no DOM mutation to wrap a transition around when nothing
- * has rendered yet. That still plays the identical rise by hand below,
- * gated behind the intro loader's own `ready` flip (see useIntroReady),
- * using the exact same GSAP tween this file has always used for it - this
- * was never the source of any of the bugs above, only the navigation half
- * was.
+ * Click and popstate are NOT symmetric, and it's tempting to make them so
+ * - they can't be, for one real reason: a click lets this file control
+ * exactly when the route actually changes (router.push() is only called
+ * once cover()'s own animation has fully finished), so there's never a
+ * window where new content could paint before the columns have grown
+ * in enough to hide it. A popstate fires *after* the browser has already
+ * changed the URL - Next's own router can re-render to match it on
+ * whatever timing it likes, which this file has no way to delay the way
+ * a click's own router.push() call can be delayed. Covering animated,
+ * the normal way, on a popstate would leave a real window for that race.
+ * See pageColumnsApi.coverInstant's own doc comment (PageTransitionColumns.tsx)
+ * for the fix: popstate snaps the columns to their fully-covered end state
+ * synchronously, with no animation, removing that window entirely rather
+ * than trying to win a race against it.
  */
 export function PageTransition({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const pathname = usePathname();
   const ready = useIntroReady();
-  const ref = useRef<HTMLDivElement>(null);
 
-  // Announces "a real internal navigation is starting" (see
-  // pageTransitionState.onNavigate's own doc comment in lib/motion.ts) so
-  // SiteNav can close the mobile menu instantly, with no animation, before
-  // next-view-transitions takes its "old" snapshot - that snapshot happens
-  // synchronously inside its own click/popstate handling, so a capture-
-  // phase document listener (ahead of React's own bubble-phase synthetic
-  // events, and ahead of next-view-transitions' own Link onClick) is the
-  // only reliable way to run first. This file doesn't call router.push or
-  // preventDefault itself anymore - next-view-transitions' own Link and
-  // popstate handling own that entirely now; this listener only ever
-  // observes.
+  const transitioningRef = useRef(false);
+  // Mirrors `routerRef` pattern used throughout this project - the click
+  // listener effect below attaches exactly once (empty deps) and needs
+  // router.push to stay current across however many renders happen
+  // between attachment and an actual click, regardless of whether
+  // useRouter() ever returns a new object identity.
+  const routerRef = useRef(router);
+  useEffect(() => {
+    routerRef.current = router;
+  }, [router]);
+  // Holds the callback that tells the in-flight transition "the DOM now
+  // matches the new route" - router.push() itself doesn't signal this
+  // (App Router navigation is async), and a popstate-driven change has no
+  // equivalent call to await at all, so both paths wait on this same ref
+  // until the pathname effect below confirms React has actually committed
+  // the new page.
+  const resolveRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    if (ready) pageTransitionState.hasPlayedInitial = true;
+  }, [ready]);
+
+  // Resolves whatever transition is in flight once the new route has
+  // actually committed, and resets scroll to the top of it - matching Vue
+  // Router's own default scrollBehavior (fluid.glass's actual mechanism
+  // for this). Runs while the columns are still fully covering the
+  // screen, so the jump is never visible.
+  useEffect(() => {
+    resolveRef.current?.();
+    resolveRef.current = null;
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  // Races the new page's own priority-image decode against
+  // pageRevealHoldDuration before letting the columns reveal it - a brand-
+  // new <img> isn't guaranteed to reuse any previously-decoded raster even
+  // when Next's own `priority` preload already has the bytes on the wire,
+  // and the columns are fully opaque right up until reveal() actually
+  // starts, so there's nothing visible to lose by waiting out whichever
+  // finishes first.
+  const waitForDecode = useCallback(() => {
+    const priorityImgs = Array.from(
+      document.querySelectorAll<HTMLImageElement>("img"),
+    ).filter((img) => img.loading !== "lazy");
+    const decodePromises = priorityImgs.map((img) =>
+      img.decode ? img.decode().catch(() => {}) : Promise.resolve(),
+    );
+    const decodeTimeout = new Promise<void>((resolve) =>
+      setTimeout(resolve, pageRevealHoldDuration * 1000),
+    );
+    return Promise.race([Promise.allSettled(decodePromises), decodeTimeout]);
+  }, []);
+
+  // Shared by both the click and popstate paths once the screen is
+  // already (or about to be) fully covered: wait for the route to commit,
+  // wait out the decode race, reveal. `afterCovered` is where the two
+  // paths actually differ - see each call site below. Only reads
+  // refs/stable imports, so a plain empty dependency array here is
+  // correct, not a lint-rule workaround - this identity never needs to
+  // change for the click/popstate effects below to keep seeing current
+  // behavior.
+  const settleAfterCovered = useCallback(() => {
+    const routeCommitted = new Promise<void>((resolve) => {
+      resolveRef.current = resolve;
+    });
+    return routeCommitted
+      .then(waitForDecode)
+      .then(() => pageColumnsApi.reveal())
+      .finally(() => {
+        transitioningRef.current = false;
+      });
+  }, [waitForDecode]);
+
   useEffect(() => {
     function handleClick(event: MouseEvent) {
       if (event.defaultPrevented || event.button !== 0) return;
@@ -100,114 +132,67 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       }
       if (url.origin !== window.location.origin) return;
       if (url.pathname === window.location.pathname) return;
+      // Ignore a second nav attempt while one is already in flight, rather
+      // than compounding two overlapping cover()/reveal() sequences - the
+      // columns already cover the screen for the first one (and are
+      // pointer-events-none, so this is purely a don't-double-fire guard,
+      // not something blocking a real click), so there's nothing stale
+      // showing in the meantime for the user to click through anyway.
+      if (transitioningRef.current) return;
+
+      event.preventDefault();
       pageTransitionState.onNavigate?.();
-    }
-    document.addEventListener("click", handleClick, true);
-    return () => document.removeEventListener("click", handleClick, true);
-  }, []);
 
-  useEffect(() => {
-    function handlePopState() {
-      pageTransitionState.onNavigate?.();
-    }
-    window.addEventListener("popstate", handlePopState);
-    return () => window.removeEventListener("popstate", handlePopState);
-  }, []);
-
-  // Parked fixed/offscreen via this inline style on every render until
-  // `ready` flips - after that, the useGSAP effect below clears every one
-  // of these props (clearProps) and this stops being applied (ready is
-  // true from then on, for the rest of the session - see useIntroReady's
-  // own doc comment). 100dvh/translateY(100vh)/scale ordering, and the
-  // vh-not-px reasoning, are unchanged from this file's previous version -
-  // see git history if any of this needs re-deriving.
-  const initialStyle: React.CSSProperties | undefined = !ready
-    ? {
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        height: "100dvh",
-        overflow: "hidden",
-        transform: `translateY(100vh) scale(${pageSlideScaleFrom})`,
-        zIndex: 10,
-        willChange: "transform",
-      }
-    : undefined;
-
-  useGSAP(
-    () => {
-      if (!ready || !ref.current) return;
-      const el = ref.current;
-
-      pageTransitionState.hasPlayedInitial = true;
-
-      const release = () => {
-        gsap.set(el, {
-          clearProps: "position,top,left,right,height,overflow,y,scale,zIndex,willChange",
-        });
-        // Matches the old release()'s own reasoning: a child with its own
-        // topOfPage ScrollTrigger (Parallax.tsx) measures correctly only
-        // once this wrapper has actually returned to normal flow -
-        // refreshing here, synchronously in this same GSAP callback, keeps
-        // that measurement from going stale for even one paint.
-        ScrollTrigger.refresh();
-      };
-
+      const href = url.pathname + url.search + url.hash;
       const prefersReducedMotion = window.matchMedia(
         "(prefers-reduced-motion: reduce)",
       ).matches;
       if (prefersReducedMotion) {
-        release();
+        routerRef.current.push(href);
         return;
       }
 
-      // el is fully offscreen right now - nothing inside it is visible yet,
-      // so briefly delaying the rise costs nothing. Spent decoding el's own
-      // non-lazy images (typically a full-bleed hero photo) before the rise
-      // starts, same reasoning as every other navigation's own hold used to
-      // have: a brand-new <img> isn't guaranteed to reuse any previously-
-      // decoded raster even when Next's own `priority` preload already has
-      // the bytes on the wire. Raced against a timeout so one slow decode
-      // can't hold up the whole reveal.
-      const priorityImgs = Array.from(
-        el.querySelectorAll<HTMLImageElement>("img"),
-      ).filter((img) => img.loading !== "lazy");
-      const decodePromises = priorityImgs.map((img) =>
-        img.decode ? img.decode().catch(() => {}) : Promise.resolve(),
-      );
-      const decodeTimeout = new Promise<void>((resolve) =>
-        setTimeout(resolve, pageSlideHoldDuration * 1000),
-      );
+      transitioningRef.current = true;
+      // Sequential, not concurrent: the columns have to be fully, solidly
+      // covering - not mid-stagger - before the route swap happens
+      // underneath, or a fast (likely, since this site is fully static)
+      // navigation can land while some columns haven't grown in yet,
+      // visible through the gap. router.push() only fires once cover()'s
+      // own promise has actually resolved.
+      pageColumnsApi.cover().then(() => {
+        routerRef.current.push(href);
+        settleAfterCovered();
+      });
+    }
+    // Capture phase, same reasoning as every click-listener this file has
+    // ever used: runs before the anchor's own default navigation and
+    // before anything else's bubble-phase handler, regardless of where in
+    // the tree the actual link lives.
+    document.addEventListener("click", handleClick, true);
+    return () => document.removeEventListener("click", handleClick, true);
+  }, [settleAfterCovered]);
 
-      let cancelled = false;
-      Promise.race([Promise.allSettled(decodePromises), decodeTimeout]).then(
-        () => {
-          if (cancelled) return;
-          gsap.to(el, {
-            y: 0,
-            scale: 1,
-            duration: pageSlideDuration,
-            ease: ease.inOutQuart,
-            onComplete: release,
-          });
-        },
-      );
+  useEffect(() => {
+    function handlePopState() {
+      pageTransitionState.onNavigate?.();
 
-      return () => {
-        cancelled = true;
-      };
-    },
-    { scope: ref, dependencies: [ready] },
-  );
+      const prefersReducedMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      // No router.push here - the browser already changed the URL by the
+      // time popstate fires; Next's own router picks up the new pathname
+      // independently. Under reduced motion there's nothing left for this
+      // handler to do at all: the pathname effect above still resets
+      // scroll regardless of how the navigation started.
+      if (prefersReducedMotion) return;
 
-  return (
-    <div
-      ref={ref}
-      className="relative bg-background"
-      style={initialStyle}
-    >
-      {children}
-    </div>
-  );
+      transitioningRef.current = true;
+      pageColumnsApi.coverInstant();
+      settleAfterCovered();
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [settleAfterCovered]);
+
+  return <>{children}</>;
 }

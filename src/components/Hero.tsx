@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { Link } from "next-view-transitions";
+import Link from "next/link";
 import { useRef } from "react";
 import { useGSAP } from "@gsap/react";
 import { gsap } from "@/lib/gsap";

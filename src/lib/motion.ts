@@ -26,69 +26,53 @@ export const duration = {
   slow: 1.1,
 } as const;
 
-// PageTransition's incoming-pane rise, used both for a real client-side
-// navigation and (gated behind the intro loader's own `ready` flip) for the
-// very first page - translateY *and* scale together (an earlier version of
-// this comment claimed translateY-only "confirmed by direct frame-by-frame
-// observation," which was wrong: re-verified live against fluid.glass's
-// actual current site with an rAF/computed-style poll on their own pane
-// element, its transform is matrix(0.8, 0, 0, 0.8, 0, <viewportHeight>) the
-// instant it appears, animating to matrix(1,0,0,1,0,0) at rest - scale
-// 0.8 -> 1 and translateY 100% -> 0 together, not a pure slide). See
-// pageSlideScaleFrom below for the matching scale constant. No backdrop
-// behind the margin that scale leaves while below 1 - fluid.glass has one
-// (a permanently-dark element sitting behind their own single shared
-// pane), but this project's two-slot design keeps the *real* outgoing page
-// visible underneath instead of unmounting it, so that margin already
-// shows real content on its own; a backdrop on top of that read as the
-// whole screen blacking out before the new page slides over it, not as a
-// pane. The outgoing page itself *does* darken during the transition now
-// though (see pageOutgoingDarkenOpacity below) - a different thing from
-// that rejected backdrop: it dims the old page in place, in whatever
-// margin is showing around the incoming pane, rather than covering the
-// screen with a separate dark layer - added because two pages sharing the
-// same light background (e.g. About -> Contact, both cream) made the
-// incoming pane's own rise unreadable as a pane at all, reading instead as
-// the new page's text just appearing on its own.
+// The vertical-columns page-transition wipe (PageTransitionColumns.tsx):
+// pageColumnCount columns span the viewport, each springing up from the
+// bottom (scaleY 0 -> 1, staggered left to right) to fully cover the
+// screen; the real route swap happens underneath while completely hidden;
+// then every column slides straight up and off-screen (yPercent 0 -> -100,
+// same left-to-right stagger order) to reveal the new page. Deliberately
+// not a browser-API-driven crossfade/snapshot and not a transform-based
+// rising pane (both tried earlier in this project's history, both the
+// source of every real-device-only bug this project ever chased - wrong-
+// content flashes, scroll corruption, a white flash from a browser-engine
+// timing gap, a mask shape distorting on a phone's aspect ratio). Columns
+// are a solid, opaque, purely decorative overlay that never touches,
+// clones, or measures the actual page content - structurally, none of
+// that entire bug class is possible here, since nothing about the real
+// page's own DOM or scroll state is ever read or depended on.
 //
-// Duration itself is also slower than this project's first attempt - 0.65s
-// read as noticeably snappier than fluid.glass's own ~1s rise, and even
-// after matching that measured ~1s rise (plus its own further ~0.3s hold,
-// below) directly, live user feedback on the actual running site was still
-// "too quick" - bumped again past the originally-measured fluid.glass
-// benchmark itself on the strength of that direct feedback, which takes
-// priority over an earlier automated measurement.
-export const pageSlideDuration = 1.25;
+// Values tuned by direct feedback on the live site, not derived from any
+// external reference - this isn't chasing fluid.glass's own look anymore.
+export const pageColumnCount = 12;
+export const pageColumnStagger = 0.08;
+export const pageColumnCoverDuration = 0.65;
+export const pageColumnRevealDuration = 0.7;
+export const pageColumnCoverEase = "back.out(1.4)";
+export const pageColumnRevealEase = "power3.inOut";
 
-// How long PageTransition's incoming pane sits fully offscreen before its
-// rise tween actually starts, racing the new page's own priority-image
-// decode against this timeout (see PageTransition.tsx) - loosely anchored
-// to fluid.glass's own observed ~0.3s hold at full offscreen scale, then
-// (like pageSlideDuration above) nudged past that measured number on
-// direct live feedback that the whole transition still read as too fast.
-export const pageSlideHoldDuration = 0.35;
+// How long PageTransition waits, once the new route has committed (still
+// fully hidden behind the still-covering columns), for that page's own
+// non-lazy images to decode before calling pageColumnsApi.reveal() - races
+// the decode against this timeout so one slow image can't hold the
+// columns closed indefinitely either.
+export const pageRevealHoldDuration = 0.35;
 
-// Total worst-case time from navigation (or, for the very first page, the
-// intro loader's `ready` flip) to the incoming pane actually settling -
-// hold plus the rise itself. Anything outside PageTransition that needs to
-// stay hidden/un-revealed until the pane has actually covered the screen
-// should delay by this, not guess its own number - see Footer.tsx's own
-// crossfade, which does exactly that.
-export const pageTransitionSettleDuration =
-  pageSlideHoldDuration + pageSlideDuration;
-
-// Starting scale of PageTransition's incoming pane (animates to 1 as it
-// rises) - fluid.glass's own literal value, see pageSlideDuration's doc
-// comment above for how this was confirmed.
-export const pageSlideScaleFrom = 0.8;
-
-// How dark PageTransition's outgoing-page snapshot gets tinted (a plain
-// black overlay faded in on top of it, see PageTransition.tsx) over the
-// course of the transition - not full black, just enough contrast that
-// the old page visibly recedes even against an incoming page sharing the
-// same light background, without reading as the screen blacking out the
-// way a full-opacity cover would.
-export const pageOutgoingDarkenOpacity = 0.55;
+// Total worst-case time from a freshly-mounted page's own entrance effects
+// starting (right as the route commits, still hidden behind the columns)
+// to the LAST column fully clearing the screen - the decode-race hold
+// above, plus the reveal animation's own duration, plus its staggered
+// tail. Anything that needs to stay hidden/un-revealed until the columns
+// have actually cleared should delay by this, not guess its own number -
+// see Hero.tsx, WordReveal.tsx, RevealOnScroll.tsx. Kept under the name
+// pageSlideDuration (not renamed to something column-specific) since
+// every one of those call sites already imports it under this name and
+// the columns *do* slide - reveal() is a literal yPercent translate, not
+// just a figure of speech.
+export const pageSlideDuration =
+  pageRevealHoldDuration +
+  pageColumnRevealDuration +
+  pageColumnStagger * (pageColumnCount - 1);
 
 // How long the intro loader's own overlay (the cream BrandMark/wordmark
 // screen, see IntroSequence.tsx) takes to fade itself out of the way once
