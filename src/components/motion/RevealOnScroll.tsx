@@ -35,11 +35,12 @@ export function RevealOnScroll({
       // Gating on `ready` (above) stops this from finishing behind the
       // intro loader's own opaque overlay, but an above-the-fold instance's
       // ScrollTrigger is already satisfied the instant `ready` flips, so
-      // its fade can still finish before the page's own incoming pane
-      // (every load now, the very first included - see PageTransition.tsx)
-      // has actually risen enough to show it. Delaying the start by that
-      // pane's own rise duration (pageSlideDuration) closes that gap - same
-      // fix, same reasoning as Hero.tsx's own text reveal.
+      // its fade can still finish before PageTransition's columns wipe
+      // (every load now, the very first included - see
+      // PageTransitionColumns.tsx) has actually cleared enough to show it.
+      // Delaying the start by the columns' own reveal duration
+      // (pageSlideDuration) closes that gap - same fix, same reasoning as
+      // Hero.tsx's own text reveal.
       //
       // Scoped to only the instances that actually need it: elements
       // already inside the "top 85%" trigger zone at this exact moment
@@ -54,9 +55,9 @@ export function RevealOnScroll({
       // the instant its real trigger fired, which is what made scrolling
       // through the page read as sluggish.
       //
-      // Also only on the initial load - every other navigation's incoming
-      // pane already decodes its own priority images and only starts
-      // rising once that's done (see PageTransition.tsx), so an
+      // Also only on the initial load - every other navigation's columns
+      // wipe already decodes the new page's priority images and only
+      // starts revealing once that's done (see PageTransition.tsx), so an
       // above-the-fold trigger there never fires while still hidden in the
       // first place. Adding this same delay to every navigation would just
       // make an already-correct case more sluggish for no reason.

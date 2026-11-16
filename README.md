@@ -14,21 +14,18 @@ engineering rather than a typical CRUD/content site.
 
 ## Notable technical details
 
-- **Custom page transition system** - modeled on fluid.glass: the incoming
-  page rises from fully offscreen, growing from a smaller scale up to full
-  size, while the outgoing page stays real and visible underneath (darkened
-  partway through, so two pages with the same white background don't read
-  as one page's text sliding by itself). The outgoing page is never
-  unmounted mid-transition - both pages coexist as live, stable React
-  subtrees for the transition's duration - except for the one moment it has
-  to be swapped out for a static DOM snapshot right before navigating, since
-  Next's router would otherwise re-render it to the new route out from
-  under the still-visible pane. That snapshot's own position is locked
-  independently of the live page underneath it, which stays frozen (height
-  and all) regardless of whatever route it silently re-renders to - see the
-  doc comments around `handleClick`/`TransitionPane` in `PageTransition.tsx`
-  for the handful of narrow, scroll-position-dependent bugs this correctness
-  took a few rounds to chase down.
+- **Custom page transition system** - a vertical-columns wipe: twelve
+  columns spring up from the bottom, staggered left to right, to fully
+  cover the screen; the route swap happens completely hidden underneath;
+  then the columns slide up and off to reveal the new page. The columns
+  are a solid, opaque, purely decorative overlay that never touches,
+  clones, or measures the actual page content - deliberately not a
+  browser-API-driven crossfade/snapshot and not a transform-based rising
+  pane, both tried earlier in this project's history and both the source
+  of every real-device-only bug this project ever chased (wrong-content
+  flashes, scroll corruption, a white flash from a browser-engine timing
+  gap). See the doc comments in `PageTransition.tsx` and
+  `PageTransitionColumns.tsx` for the full mechanism.
 - **Scroll-driven hero and pinned sections** - parallax drift, pinned-scale
   cinematic moments, and a horizontal scroll-jacked process section, all
   built on GSAP ScrollTrigger rather than CSS scroll-timeline.

@@ -77,15 +77,14 @@ export default function Hero() {
         return;
       }
 
-      // This whole section is rendered inside PageTransition's own
-      // TransitionPane wrapper - the exact element that component
-      // translates as its incoming pane, on *every* load now, the very
-      // first included (see PageTransition.tsx) - so this always times off
-      // pageSlideDuration (lib/motion.ts), the pane's own rise duration,
-      // regardless of initial vs. subsequent navigation. Without this, the
-      // text would finish most of its own fade while still hidden
-      // off-screen inside the pane, landing already mostly visible the
-      // instant it's actually uncovered instead of visibly revealing.
+      // This page is fully hidden behind PageTransition's columns wipe
+      // until it reveals (see PageTransitionColumns.tsx), on *every* load
+      // now, the very first included - so this always times off
+      // pageSlideDuration (lib/motion.ts), the columns' own reveal
+      // duration, regardless of initial vs. subsequent navigation. Without
+      // this, the text would finish most of its own fade while still
+      // hidden behind the columns, landing already mostly visible the
+      // instant they actually clear instead of visibly revealing.
       const topBarDelay = pageSlideDuration;
       const headlineDelay = topBarDelay + 0.1;
 

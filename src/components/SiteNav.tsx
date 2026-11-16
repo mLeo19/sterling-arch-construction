@@ -216,9 +216,10 @@ export function SiteNav() {
   // PageTransition's own hand-rolled scroll lock owned that same gate for
   // the rest of the transition, and resetting it here first would have
   // clobbered that lock back off underneath it. That lock doesn't exist
-  // anymore - the View Transitions API (see PageTransition.tsx's own doc
-  // comment) needs no scroll lock at all, so a navigating close is no
-  // different from any other close now: reset it the same way.
+  // anymore - PageTransition's columns wipe (see PageTransition.tsx's own
+  // doc comment) is a purely decorative overlay that never touches scroll
+  // at all, so a navigating close is no different from any other close
+  // now: reset it the same way.
   useEffect(() => {
     if (open) {
       if (!openedByBottomRef.current) {
