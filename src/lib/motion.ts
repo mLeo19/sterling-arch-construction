@@ -74,19 +74,6 @@ export const pageSlideDuration =
   pageColumnRevealDuration +
   pageColumnStagger * (pageColumnCount - 1);
 
-// How long the intro loader's own overlay (the cream BrandMark/wordmark
-// screen, see IntroSequence.tsx) takes to fade itself out of the way once
-// liftoff fires. Purely about that overlay's own dismissal speed now - it
-// used to also stand in for "how long until the first page's content is
-// actually visible" (back when the first page had no pane rise of its own
-// and just sat there, statically revealed as this fade cleared), but the
-// first page now rises as the exact same pane every other navigation uses
-// (gated on the same `ready` flip this overlay's own fade starts from), so
-// anything timing itself off "when is the page visible" should use
-// pageSlideDuration instead, same as a real navigation - see Hero.tsx and
-// WordReveal.tsx.
-export const introFadeOutDuration = 0.5;
-
 // Whether the app's one-time initial-load PageTransition has already played
 // in this session. A plain mutable object, not React state/context - a
 // freshly-remounted page component (Hero's text reveal, RevealOnScroll)

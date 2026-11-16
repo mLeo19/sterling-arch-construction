@@ -5,8 +5,9 @@ import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
 import { BrandMark } from "@/components/ui/BrandMark";
 import { BrandCube } from "@/components/ui/BrandCube";
+import { pageColumnsApi } from "@/components/PageTransitionColumns";
 import { site } from "@/lib/data/site";
-import { ease, introFadeOutDuration, staggerReveal } from "@/lib/motion";
+import { ease, staggerReveal } from "@/lib/motion";
 
 // BrandMark's hexagon measures 33 wide x 36 tall (viewBox units), not a
 // perfectly regular hexagon's sqrt(3)/2 height-to-width ratio - this stretch
@@ -152,28 +153,43 @@ function IntroLoader({ onReady }: { onReady: () => void }) {
             staggerReveal.stagger * (WORD_LENGTH - 1),
         ) + 0.2,
       )
-      // The handoff to the real page is a plain opacity fade-out of this
-      // overlay - deliberately not PageTransition's own pane/slide
-      // mechanism. There's no "outgoing page" to hold onto at intro time
-      // (this is overlay -> first real page, not page -> page), so reusing
-      // that machinery here would be solving a problem that doesn't exist.
-      // onReady() fires at the start of the fade, not after it completes -
-      // the real first page starts settling in while still partly hidden
-      // behind the fading overlay (RevealOnScroll.tsx's own
-      // introFadeOutDuration delay is what keeps an above-the-fold reveal
-      // from finishing before the overlay has faded enough to show it).
-      .call(onReady, [], "liftoff")
-      .set(overlayRef.current, { pointerEvents: "none" }, "liftoff")
-      .to(
-        overlayRef.current,
-        {
-          opacity: 0,
-          duration: introFadeOutDuration,
-          ease: "power2.out",
-          onComplete: () => gsap.set(overlayRef.current, { display: "none" }),
+      // The handoff to the real page reuses the exact same vertical-
+      // columns wipe every other navigation uses (PageTransitionColumns.tsx)
+      // - an earlier version of this handoff was a plain opacity fade-out
+      // of this overlay instead, reasoning there was no "outgoing page" to
+      // hold onto at intro time so PageTransition's own mechanism didn't
+      // apply. That reasoning missed that the fade only ever covered THIS
+      // overlay, not the handoff to the real page as a whole - once
+      // PageTransition stopped doing its own separate first-load reveal,
+      // there was nothing left visually connecting this loader's exit to
+      // the homepage appearing: a dead, un-animated beat where the page
+      // was already fully rendered underneath and just sat there until
+      // Hero's own entrance eventually started on its own timer - reported
+      // live as "not seeing the page transition animation after the
+      // loader is done." A plain JS call here, not another GSAP timeline
+      // step, since it has to await cover()'s own promise before doing
+      // anything else - same reasoning PageTransition.tsx's own click
+      // handler has for not calling router.push() concurrently with
+      // cover(). The columns' own black reads clearly against this
+      // overlay's cream background as they spring up. Only once fully
+      // covered does onReady() fire (letting the real page mount/settle
+      // in, hidden behind the columns, picking its own entrance timing
+      // from pageSlideDuration in lib/motion.ts same as any other
+      // navigation) and this overlay get hard-cut to display:none - it's
+      // already fully covered by the opaque columns at that point, so
+      // there's nothing left for a fade to be seen doing.
+      .call(
+        () => {
+          pageColumnsApi.cover().then(() => {
+            onReady();
+            gsap.set(overlayRef.current, { display: "none" });
+            pageColumnsApi.reveal();
+          });
         },
+        [],
         "liftoff",
       )
+      .set(overlayRef.current, { pointerEvents: "none" }, "liftoff")
       .to(
         groupRef.current,
         { y: -70, opacity: 0, duration: 1.0, ease: "power2.in" },
