@@ -232,14 +232,21 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
       // completely uncontrolled route swap with no columns, no
       // ScrollTrigger.refresh(), nothing.
       event.preventDefault();
-      pageTransitionState.onNavigate?.();
+      // Awaited below (not fire-and-forget) - see pageTransitionState.
+      // onNavigate's own doc comment in lib/motion.ts for why: a menu open
+      // at click time gets to play its own real, graceful close animation
+      // and actually finish before cover() starts, instead of the two
+      // competing for the same frame budget. Resolves on (essentially)
+      // the same tick when the menu wasn't open, which is the overwhelming
+      // majority of clicks.
+      const menuClosed = pageTransitionState.onNavigate?.() ?? Promise.resolve();
 
       const href = url.pathname + url.search + url.hash;
       const prefersReducedMotion = window.matchMedia(
         "(prefers-reduced-motion: reduce)",
       ).matches;
       if (prefersReducedMotion) {
-        routerRef.current.push(href);
+        menuClosed.then(() => routerRef.current.push(href));
         return;
       }
 
@@ -247,12 +254,16 @@ export function PageTransition({ children }: { children: React.ReactNode }) {
         // Only the latest queued href survives - a second then third
         // click while still covered should land wherever the user
         // clicked *last*, not visit every intermediate link along the
-        // way.
+        // way. Not chained off menuClosed - draining this queue later
+        // only ever calls runClickNavigation, which doesn't need to know
+        // about the menu at all; onNavigate already fired above and the
+        // menu is closing (or already closed) on its own timeline
+        // regardless of when this queued href eventually runs.
         queuedHrefRef.current = href;
         return;
       }
 
-      runClickNavigation(href);
+      menuClosed.then(() => runClickNavigation(href));
     }
     // Capture phase, same reasoning as every click-listener this file has
     // ever used: runs before the anchor's own default navigation and

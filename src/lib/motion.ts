@@ -104,22 +104,38 @@ export const pageSlideDuration =
 //
 // onNavigate: an optional callback SiteNav registers itself into (and
 // PageTransition calls, right as it intercepts a real internal link click -
-// see handleClick) so the mobile menu can close itself *immediately*,
-// un-animated, the instant any navigation starts - not just ones triggered
-// by clicking a link inside the open MenuOverlay panel itself. That used to
-// be the only path (an onNavigate prop threaded through to each of
-// MenuOverlay's own links), which missed every other way a navigation can
-// start while the menu happens to be open: the home logo (never inside
-// MenuOverlay - it's SiteNav's own pill) and Footer's own separate set of
-// links are the two confirmed-live cases. Both are clicks PageTransition's
-// own document-level capture-phase listener sees regardless of where they
-// live in the tree, making its handleClick the one universal place this
-// actually needs to be announced from. A plain nullable callback here
-// rather than a new pub/sub system - there's only ever one SiteNav mounted,
-// so one slot is all this needs.
+// see handleClick) so the mobile menu gets a chance to close itself the
+// instant any navigation starts - not just ones triggered by clicking a
+// link inside the open MenuOverlay panel itself. That used to be the only
+// path (an onNavigate prop threaded through to each of MenuOverlay's own
+// links), which missed every other way a navigation can start while the
+// menu happens to be open: the home logo (never inside MenuOverlay - it's
+// SiteNav's own pill) and Footer's own separate set of links are the two
+// confirmed-live cases. Both are clicks PageTransition's own document-
+// level capture-phase listener sees regardless of where they live in the
+// tree, making its handleClick the one universal place this actually
+// needs to be announced from. A plain nullable callback here rather than
+// a new pub/sub system - there's only ever one SiteNav mounted, so one
+// slot is all this needs.
+//
+// Returns a Promise, not void - PageTransition.tsx's click handler (not
+// its popstate one; see that file's own doc comment for why the two
+// aren't symmetric) awaits it before starting cover(), specifically so a
+// menu that's open when a link is clicked gets to play its own real,
+// graceful close animation (shrinking pill, retreating panel/background/
+// links) and *finish* before the page transition's columns start rising -
+// a sequential handoff, not two animations competing for the same frame
+// budget at once. SiteNav's own registration resolves immediately
+// (`Promise.resolve()`) when the menu wasn't open at all, so this is a
+// no-op wait for the overwhelming majority of clicks. An earlier version
+// of this mechanism closed the menu *instantly*, un-animated, specifically
+// to dodge a real Safari performance stall from running this panel's own
+// expensive backdrop-blur layer at the same time as PageTransition's own
+// animation - sequencing instead of overlapping fixes that same problem
+// from the other direction, without giving up the graceful close.
 export const pageTransitionState: {
   hasPlayedInitial: boolean;
-  onNavigate: (() => void) | null;
+  onNavigate: (() => Promise<void>) | null;
 } = { hasPlayedInitial: false, onNavigate: null };
 
 // The clip-mask reveal used for the intro loader's wordmark letters (each

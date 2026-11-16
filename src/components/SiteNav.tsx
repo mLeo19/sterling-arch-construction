@@ -39,12 +39,9 @@ export function SiteNav() {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const labelRef = useRef<HTMLSpanElement>(null);
   const burgerLinesRef = useRef<HTMLSpanElement>(null);
-  const skipCloseAnimRef = useRef(false);
-  // Set by that same registration, a dedicated ref rather than reusing
-  // skipCloseAnimRef for the exact same reason skipCloseAnimRef itself is
-  // separate from the pill-collapse useGSAP effect's own ref above - read
-  // and cleared only by MenuOverlay's own focus-management effect.
-  // Tells that effect to skip returning focus to this button when the
+  // Set by pageTransitionState.onNavigate's own registration below, read
+  // and cleared only by MenuOverlay's own focus-management effect. Tells
+  // that effect to skip returning focus to this button when the
   // menu is closing because a link was actually clicked: the user is
   // leaving this page entirely via PageTransition, not dismissing a
   // transient overlay back to where they were (Escape/backdrop/X), so
@@ -66,6 +63,12 @@ export function SiteNav() {
   // Footer the menu is opening over already reads as a dark backdrop on its
   // own (see Footer.tsx), so a second darken-on-top there would double up.
   const openedByBottomRef = useRef(false);
+  // Set right before setOpen(false) in the onNavigate registration below -
+  // the resolve function of the Promise PageTransition.tsx awaits before
+  // starting cover(). Read and cleared by MenuOverlay itself, once its own
+  // close animation has actually settled - see that component's own doc
+  // comment on this same prop for why it lives there, not here.
+  const navCloseResolveRef = useRef<(() => void) | null>(null);
   // Mirrors `open` for the scroll-listener effect below, which only runs
   // its setup once (empty dep array - re-subscribing on every open/close
   // would be wasteful) but still needs the *current* open state at the
@@ -84,19 +87,25 @@ export function SiteNav() {
   // links), which missed every other way a navigation can start while the
   // menu happens to be open: the home logo below (part of this pill, never
   // inside MenuOverlay) and Footer's own separate links are the two
-  // confirmed-live cases - a user scrolled to a page's bottom (which
-  // auto-opens this menu, see the atBottom effect below) who then clicks
-  // either one left the menu to play its full animated close on top of
-  // PageTransition's own rise, a stray dark panel floating over the
-  // transition - confirmed live via Playwright. Empty deps - registers once
-  // and reads openRef/the refs below fresh on every actual call, same
-  // pattern as the click-listener effect in PageTransition.tsx.
+  // confirmed-live cases. Empty deps - registers once and reads openRef/
+  // the refs below fresh on every actual call, same pattern as the click-
+  // listener effect in PageTransition.tsx.
+  //
+  // Returns a Promise that resolves once the menu's own real close
+  // animation (MenuOverlay's "else" branch - the same one X/backdrop/
+  // Escape already used) has actually settled, or resolves immediately if
+  // the menu wasn't open at all - see pageTransitionState.onNavigate's own
+  // doc comment for why PageTransition.tsx awaits this before starting
+  // cover(), and navCloseResolveRef's own doc comment above for how
+  // MenuOverlay signals "settled" back through it.
   useEffect(() => {
     pageTransitionState.onNavigate = () => {
-      if (!openRef.current) return;
-      skipCloseAnimRef.current = true;
+      if (!openRef.current) return Promise.resolve();
       skipReturnFocusRef.current = true;
-      setOpen(false);
+      return new Promise<void>((resolve) => {
+        navCloseResolveRef.current = resolve;
+        setOpen(false);
+      });
     };
     return () => {
       pageTransitionState.onNavigate = null;
@@ -468,7 +477,6 @@ export function SiteNav() {
         "(prefers-reduced-motion: reduce)",
       ).matches;
       if (prefersReducedMotion) {
-        skipCloseAnimRef.current = false;
         gsap.set(pillBgRef.current, { clipPath: open ? collapsedClip : "none" });
         gsap.set(borderFrameRef.current, {
           left: open ? collapsedBorderInset : expandedBorderInset,
@@ -502,23 +510,13 @@ export function SiteNav() {
           ease: ease.outQuart,
         });
         gsap.to(buttonRef.current, { x: buttonCenterOffset, duration, ease: ease.outQuart });
-      } else if (skipCloseAnimRef.current) {
-        // Closing because a menu link was actually clicked, not because the
-        // user backed out via the X/backdrop - real navigation is a click
-        // away, and PageTransition is about to run its own much bigger
-        // rise/scale/darken animation on top of this same instant. Snapping
-        // straight to the resting state (no tween) removes the competing
-        // motion instead of visibly un-collapsing right as the new page
-        // starts rising.
-        skipCloseAnimRef.current = false;
-        gsap.set(pillBgRef.current, { clipPath: "none" });
-        gsap.set(borderFrameRef.current, {
-          left: expandedBorderInset,
-          right: expandedBorderInset,
-        });
-        gsap.set([iconRef.current, labelRef.current], { opacity: 1 });
-        gsap.set(buttonRef.current, { x: 0 });
       } else {
+        // Also the branch for a real navigation now, not just X/backdrop/
+        // Escape - see pageTransitionState.onNavigate's own doc comment in
+        // lib/motion.ts for why this pill un-collapsing gracefully (same
+        // as any other close) no longer competes with PageTransition's own
+        // columns animation: PageTransition waits for the menu's close to
+        // actually finish before starting cover() at all.
         gsap.fromTo(
           pillBgRef.current,
           { clipPath: collapsedClip },
@@ -683,9 +681,9 @@ export function SiteNav() {
       <MenuOverlay
         open={open}
         returnFocusRef={buttonRef}
-        skipCloseAnimRef={skipCloseAnimRef}
         skipReturnFocusRef={skipReturnFocusRef}
         openedByBottomRef={openedByBottomRef}
+        navCloseResolveRef={navCloseResolveRef}
         onClose={() => setOpen(false)}
       />
     </>

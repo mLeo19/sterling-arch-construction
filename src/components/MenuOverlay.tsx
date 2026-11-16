@@ -23,24 +23,18 @@ export function MenuOverlay({
   open,
   onClose,
   returnFocusRef,
-  skipCloseAnimRef,
   skipReturnFocusRef,
   openedByBottomRef,
+  navCloseResolveRef,
 }: {
   open: boolean;
   onClose: () => void;
   // Focus returns here on close, wherever "here" is (the nav's hamburger
   // button) - keeps keyboard focus from silently landing on <body>.
   returnFocusRef: RefObject<HTMLButtonElement | null>;
-  // Same ref SiteNav's own pill-collapse effect reads (and is the one that
-  // resets it back to false - this effect only ever reads it, never resets
-  // it itself, so the two effects can't race on who clears it first). See
-  // the doc comment below on why this backdrop-blur panel specifically
-  // needs the same treatment.
-  skipCloseAnimRef: RefObject<boolean>;
   // Set by pageTransitionState.onNavigate (registered in SiteNav.tsx, see
-  // its own doc comment in lib/motion.ts), a dedicated ref rather than
-  // reusing skipCloseAnimRef - see this prop's own read site below for why.
+  // its own doc comment in lib/motion.ts) - see this prop's own read site
+  // below for why.
   skipReturnFocusRef: RefObject<boolean>;
   // True when this open came from scrolling to the very bottom of the page
   // rather than a manual click - see its own doc comment in SiteNav.tsx.
@@ -49,6 +43,15 @@ export function MenuOverlay({
   // already its own dark backdrop (see Footer.tsx), so this one would only
   // double it up.
   openedByBottomRef: RefObject<boolean>;
+  // Set by pageTransitionState.onNavigate's own registration (SiteNav.tsx)
+  // right before it calls setOpen(false) for a real navigation - the
+  // resolve function of the Promise PageTransition.tsx is awaiting before
+  // starting its own cover() animation. Null for every other kind of
+  // close (X/backdrop/Escape), so the call site below is a no-op then.
+  // Read and cleared here, not by SiteNav itself, for the same reason
+  // skipReturnFocusRef is: this component is the one that actually knows
+  // when its own close animation has settled.
+  navCloseResolveRef: RefObject<(() => void) | null>;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const backgroundRef = useRef<HTMLDivElement>(null);
@@ -151,6 +154,35 @@ export function MenuOverlay({
       !backdropRef.current
     )
       return;
+
+    // Closing specifically (not opening - unaffected by this project's own
+    // navigation-timing changes, so left as it's always been) needs its
+    // own explicit reduced-motion check now that PageTransition.tsx
+    // actually awaits this panel's real close animation before starting
+    // its own columns animation (see pageTransitionState.onNavigate's own
+    // doc comment in lib/motion.ts) - without it, a reduced-motion user
+    // still sat through this panel's full ~0.5s real-time close before a
+    // navigation even started, despite PageTransition itself correctly
+    // skipping its own animation for them. Confirmed live: a reduced-
+    // motion click on a menu link never even reached the new pathname
+    // within the time a plain instant navigation should have taken.
+    if (!open && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      gsap.set([panelRef.current, backdropRef.current], {
+        autoAlpha: 0,
+        pointerEvents: "none",
+        overwrite: true,
+      });
+      gsap.set(backgroundRef.current, { scale: 0, overwrite: true });
+      gsap.set(
+        panelRef.current.querySelectorAll<HTMLElement>("[data-reveal-link]"),
+        { opacity: 0, overwrite: true },
+      );
+      gsap.set([titleRef.current, quoteWrapRef.current], { autoAlpha: 0, overwrite: true });
+      navCloseResolveRef.current?.();
+      navCloseResolveRef.current = null;
+      return;
+    }
+
     const links = panelRef.current.querySelectorAll<HTMLElement>("[data-reveal-link]");
     // 150% of each link's own (rendered) height, computed per-element -
     // this project's fluid-vw sizing means that height differs by
@@ -270,29 +302,17 @@ export function MenuOverlay({
         { autoAlpha: 0 },
         { autoAlpha: 1, delay: 0.3, duration: 0.5, ease: ease.inOutCubic, overwrite: true },
       );
-    } else if (skipCloseAnimRef.current) {
-      // Closing because a menu link was actually clicked, not because the
-      // user backed out via the X/backdrop - real navigation is a click
-      // away, and PageTransition is about to run its own rise/scale
-      // animation on this same instant. This panel's backdrop-blur is
-      // expensive to keep re-rendering every frame while its backdrop (the
-      // page behind it) is simultaneously changing under PageTransition's
-      // animation - confirmed via a real Safari recording (frame-hashed to
-      // find exact stall ranges, not guessed from screenshots) showing the
-      // page stuck rendering the same frame for 100-500ms+ stretches right
-      // in this exact window, something Chromium never reproduced for the
-      // same scenario. Snapping straight to the resting (closed) state
-      // removes this panel from that contention entirely, the same fix
-      // already applied to the pill's own shape-revert in SiteNav.tsx.
-      gsap.set([panelRef.current, backdropRef.current], {
-        autoAlpha: 0,
-        pointerEvents: "none",
-        overwrite: true,
-      });
-      gsap.set(backgroundRef.current, { scale: 0, overwrite: true });
-      gsap.set(links, { y: linkHiddenY, opacity: 0, overwrite: true });
-      gsap.set([titleRef.current, quoteWrapRef.current], { autoAlpha: 0, overwrite: true });
     } else {
+      // This same branch now handles every close, navigation included -
+      // see pageTransitionState.onNavigate's own doc comment in
+      // lib/motion.ts for why a real navigation no longer snaps this
+      // panel straight to closed. The thing that fix actually dodged (an
+      // expensive backdrop-blur layer animating at the same time
+      // PageTransition's own columns do, a real confirmed Safari stall)
+      // is dodged a different way now: PageTransition awaits
+      // navCloseResolveRef's own resolve (below) before starting cover()
+      // at all, so the two never overlap in the first place - sequenced,
+      // not raced.
       gsap.to(backdropRef.current, {
         opacity: 0,
         duration: 1,
@@ -335,7 +355,26 @@ export function MenuOverlay({
       // window didn't stop it - it fired anyway on its original schedule
       // and yanked the freshly-reopened panel back to invisible out from
       // under the open animation. Confirmed via frame capture.
-      gsap.to(panelRef.current, { autoAlpha: 0, delay: 0.5, duration: 0, overwrite: true });
+      gsap.to(panelRef.current, {
+        autoAlpha: 0,
+        delay: 0.5,
+        duration: 0,
+        overwrite: true,
+        // Signals PageTransition.tsx (via the Promise its awaited
+        // onNavigate call returned) that it's safe to start cover() now -
+        // see navCloseResolveRef's own doc comment above for why this is
+        // a no-op for every close that isn't navigation-driven. The 0.5s
+        // mark, not the slower 1s backdrop fade's own onComplete: this is
+        // the moment the expensive backdrop-blur layer (background/links/
+        // title, all 0.5s) has actually finished - the backdrop's own
+        // remaining half-second of plain opacity fade is cheap and gets
+        // instantly covered by the columns regardless of exactly when it
+        // finishes.
+        onComplete: () => {
+          navCloseResolveRef.current?.();
+          navCloseResolveRef.current = null;
+        },
+      });
     }
   }, [open]);
 
